@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Insert text into a pty (used for drag-drop file paths) ─────────────
   insertTextInPty: (sessionId, text) =>
     ipcRenderer.send('pty:insertText', { sessionId, text }),
+  // ── HEIC → PNG conversion via macOS `sips` ─────────────────────────────
+  convertHeic: (sourcePath) => ipcRenderer.invoke('fs:convertHeic', sourcePath),
+  normalizeImage: (sourcePath) => ipcRenderer.invoke('fs:normalizeImage', sourcePath),
 
   // ── Git operations ──────────────────────────────────────────────────────
   gitStatus: (cwd) => ipcRenderer.invoke('git:status', cwd),

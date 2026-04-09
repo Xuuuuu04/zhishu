@@ -1133,6 +1133,63 @@ ipcMain.on('pty:insertText', (_, { sessionId, text }) => {
   proc.write(text);
 });
 
+// ─── HEIC → PNG conversion (macOS only, via built-in `sips`) ──────────────
+//
+// macOS screenshots default to HEIC format since Ventura, which most AI CLI
+// tools don't understand. `sips` is a system-provided image processor that
+// can convert to PNG in ~50ms with zero extra dependencies.
+//
+// Output goes to the system temp dir with a unique timestamp so repeated
+// drops of the same file don't clobber each other.
+ipcMain.handle('fs:convertHeic', async (_, sourcePath) => {
+  if (!sourcePath) return { error: 'No source path' };
+  return new Promise((resolve) => {
+    const baseName = path.basename(sourcePath, path.extname(sourcePath));
+    const outputPath = path.join(
+      os.tmpdir(),
+      `zhishu-${baseName}-${Date.now()}.png`
+    );
+    execFile('sips',
+      ['-s', 'format', 'png', sourcePath, '--out', outputPath],
+      { timeout: 10000 },
+      (err, stdout, stderr) => {
+        if (err) {
+          return resolve({ error: stderr || err.message });
+        }
+        resolve({ ok: true, path: outputPath });
+      }
+    );
+  });
+});
+
+// ─── Generic image → PNG conversion ────────────────────────────────────────
+// Catches HEIC, TIFF, BMP, and anything else sips can handle. Returns the
+// original path untouched if it's already in a web-friendly format.
+ipcMain.handle('fs:normalizeImage', async (_, sourcePath) => {
+  if (!sourcePath) return { error: 'No source path' };
+  const ext = path.extname(sourcePath).toLowerCase();
+  const WEB_SAFE = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+  if (WEB_SAFE.includes(ext)) {
+    return { ok: true, path: sourcePath, converted: false };
+  }
+  // Fall through to sips-based conversion
+  return new Promise((resolve) => {
+    const baseName = path.basename(sourcePath, ext);
+    const outputPath = path.join(
+      os.tmpdir(),
+      `zhishu-${baseName}-${Date.now()}.png`
+    );
+    execFile('sips',
+      ['-s', 'format', 'png', sourcePath, '--out', outputPath],
+      { timeout: 10000 },
+      (err, stdout, stderr) => {
+        if (err) return resolve({ error: stderr || err.message });
+        resolve({ ok: true, path: outputPath, converted: true });
+      }
+    );
+  });
+});
+
 // Read the first ~10KB of a file as text (for the file preview pane)
 ipcMain.handle('fs:readFilePreview', async (_, filePath) => {
   try {

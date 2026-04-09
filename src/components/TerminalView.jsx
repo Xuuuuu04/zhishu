@@ -656,8 +656,65 @@ export default function TerminalView({
     ? formatDuration(sessionStatus.lastDuration)
     : null;
 
+  // ── Unified drop handler used by both the wrapper (fallback) and the
+  //    termContainer (primary). Accepts native files from Finder/Screenshot
+  //    plus our internal file-tree drags.
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.nativeEvent._handled = true;
+    e.currentTarget.classList?.remove('terminal-drop-zone-active');
+
+    const pathsToInsert = [];
+    const internalPath = e.dataTransfer.getData('application/x-zhishu-file');
+    if (internalPath) {
+      pathsToInsert.push(internalPath);
+    } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      for (const file of Array.from(e.dataTransfer.files)) {
+        const nativePath = file.path;
+        if (!nativePath) continue;
+        try {
+          const result = await window.electronAPI.normalizeImage(nativePath);
+          if (result?.ok) {
+            pathsToInsert.push(result.path);
+            if (result.converted) {
+              termRef.current?.write(
+                `\r\n\x1b[2m[已转换 ${file.name} → PNG]\x1b[0m\r\n`
+              );
+            }
+          } else {
+            pathsToInsert.push(nativePath);
+          }
+        } catch (_) {
+          pathsToInsert.push(nativePath);
+        }
+      }
+    } else {
+      const textPath = e.dataTransfer.getData('text/plain');
+      if (textPath) pathsToInsert.push(textPath);
+    }
+
+    if (pathsToInsert.length > 0) {
+      const quoted = pathsToInsert
+        .map((p) => `'${p.replace(/'/g, "'\\''")}'`)
+        .join(' ');
+      window.electronAPI.insertTextInPty(sessionId, quoted + ' ');
+      termRef.current?.focus();
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
   return (
-    <div style={styles.wrapper}>
+    <div
+      style={styles.wrapper}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Dedicated drag bar — a thin invisible strip at the very top of the
           terminal panel that participates in window dragging. Avoids the
           earlier issue of the entire toolbar consuming button clicks. */}
@@ -899,39 +956,25 @@ export default function TerminalView({
       )}
 
       {/* ═══ xterm container ════════════════════════════════════════════ */}
-      {/* Drop zone — dragging a file from the file tree drops its path
-          (POSIX-quoted) into the pty so the AI can reference it. */}
+      {/* Drop is handled at the wrapper level — events bubble up. We still
+          add visual feedback here via dragover/dragleave. */}
       <div
         ref={containerRef}
         style={styles.termContainer}
         onClick={() => termRef.current?.focus()}
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('application/x-zhishu-file') ||
-              e.dataTransfer.types.includes('text/plain')) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            e.currentTarget.classList.add('terminal-drop-zone-active');
-          }
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'copy';
+          e.currentTarget.classList.add('terminal-drop-zone-active');
         }}
         onDragLeave={(e) => {
           e.currentTarget.classList.remove('terminal-drop-zone-active');
         }}
         onDrop={(e) => {
-          e.preventDefault();
+          // Remove visual state — actual handling bubbles to wrapper's handleDrop
           e.currentTarget.classList.remove('terminal-drop-zone-active');
-          // Prefer the app-specific format; fall back to plain text (for native files dropped from Finder)
-          let filePath = e.dataTransfer.getData('application/x-zhishu-file');
-          if (!filePath) filePath = e.dataTransfer.getData('text/plain');
-          // Native Finder drops give us a FileList instead — handle that too
-          if (!filePath && e.dataTransfer.files.length > 0) {
-            filePath = e.dataTransfer.files[0].path;
-          }
-          if (filePath) {
-            // POSIX single-quote escape: ' → '\''
-            const escaped = `'${filePath.replace(/'/g, "'\\''")}' `;
-            window.electronAPI.insertTextInPty(sessionId, escaped);
-            termRef.current?.focus();
-          }
+          handleDrop(e);
         }}
       />
 

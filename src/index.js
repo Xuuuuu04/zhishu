@@ -146,6 +146,23 @@ globalStyle.textContent = `
 `;
 document.head.appendChild(globalStyle);
 
+// ─── Global drag-drop guard ──────────────────────────────────────────────
+// Prevent the browser's default "navigate to file://" behavior when users
+// drop files anywhere on the window. Specific drop zones (TerminalView,
+// FileTreePanel) still handle their own onDrop via React.
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+}, false);
+window.addEventListener('drop', (e) => {
+  // Only prevent default if no specific handler claimed the event.
+  // We use the `_handled` flag set by TerminalView's drop handler.
+  if (!e._handled) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, false);
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <ErrorBoundary>
     <App />
