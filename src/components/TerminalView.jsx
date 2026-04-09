@@ -331,6 +331,7 @@ export default function TerminalView({
   sessionCreatedAt, sessionStatus,
   notificationsEnabled, onNotificationsToggle,
   sessionLastTool,  // Last AI tool used in this session (for auto-restore)
+  isActive,         // Whether this session is the currently visible one
 }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -350,6 +351,40 @@ export default function TerminalView({
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // ── Window focus restoration ───────────────────────────────────────────────
+  //
+  // When the Electron window is hidden to the menu bar and then shown again,
+  // mainWindow.focus() only restores OS-level window focus. xterm.js needs an
+  // explicit term.focus() call to re-activate its keyboard event listeners.
+  //
+  // Symptom without this fix: scrolling works (mouse events), typing does not.
+  //
+  // We listen on the browser's 'focus' event (fires when the Electron window
+  // regains OS focus) and immediately re-focus the active terminal canvas.
+  useEffect(() => {
+    if (!isActive) return;
+    const handleWindowFocus = () => {
+      // Small rAF delay so the window has fully composited before we grab focus
+      requestAnimationFrame(() => {
+        termRef.current?.focus();
+      });
+    };
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [isActive]);
+
+  // ── Session becomes active → grab focus ───────────────────────────────────
+  //
+  // When the user switches to this session (isActive changes to true), ensure
+  // xterm gets keyboard focus so typing works immediately without clicking.
+  useEffect(() => {
+    if (isActive && termRef.current) {
+      requestAnimationFrame(() => {
+        termRef.current?.focus();
+      });
+    }
+  }, [isActive]);
 
   // ── Read store values up-front (referenced by initTerminal below) ────
   const toolCatalog = useSessionStore((s) => s.toolCatalog);

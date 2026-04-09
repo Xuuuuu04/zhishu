@@ -126,6 +126,7 @@ export default function App() {
                     notificationsEnabled={notificationsEnabled}
                     onNotificationsToggle={toggleNotifications}
                     sessionLastTool={s.lastTool}
+                    isActive={s.id === activeSessionId}
                   />
                 </div>
               ))

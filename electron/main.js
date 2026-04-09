@@ -694,9 +694,17 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Start process monitor (1.5s cadence — responsive without being noisy)
-  monitorInterval = setInterval(() => {
-    monitorTick();
+  // Start process monitor (1.5s cadence — responsive without being noisy).
+  // monitorTick() is async (spawns `ps`). Using a guard flag prevents overlapping
+  // invocations when ps is slow (e.g. many processes), which would pile up child
+  // processes and delay IPC message handling (making key input feel "stuck").
+  let monitorRunning = false;
+  monitorInterval = setInterval(async () => {
+    if (!monitorRunning) {
+      monitorRunning = true;
+      try { await monitorTick(); } catch (_) {}
+      monitorRunning = false;
+    }
     refreshTrayMenu();
   }, 1500);
 
@@ -1424,7 +1432,13 @@ ipcMain.handle('pty:create', (event, { sessionId, cwd, cols, rows }) => {
 
 ipcMain.on('pty:write', (_, { sessionId, data }) => {
   const proc = ptyProcesses.get(sessionId);
-  if (!proc) return;
+  if (!proc) {
+    // This can happen briefly when window regains focus before pty is fully ready.
+    // Logging here helps diagnose "can't type" bugs — if this fires repeatedly, the
+    // renderer's sessionId has drifted out of sync with the ptyProcesses map.
+    console.warn(`[pty:write] no pty for session ${sessionId?.slice(0, 8)} — input dropped`);
+    return;
+  }
   proc.write(data);
 
   // Detect user instruction submission: any Enter keypress is the signal.
