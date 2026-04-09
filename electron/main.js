@@ -1419,6 +1419,11 @@ ipcMain.handle('pty:create', (event, { sessionId, cwd, cols, rows }) => {
     ptyProcesses.delete(sessionId);
     ptyMeta.delete(sessionId);
     sessionStatus.delete(sessionId);
+    sessionLaunchedTool.delete(sessionId);
+    // Cancel any pending "response complete" notification timer
+    const pending = notifyTimers.get(sessionId);
+    if (pending) { clearTimeout(pending); notifyTimers.delete(sessionId); }
+
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
       win.webContents.send(`pty:exit:${sessionId}`, exitCode);
@@ -1460,8 +1465,9 @@ ipcMain.on('pty:resize', (_, { sessionId, cols, rows }) => {
 ipcMain.on('pty:kill', (_, { sessionId }) => {
   const proc = ptyProcesses.get(sessionId);
   if (proc) {
-    try { proc.kill(); } catch (_) {}
+    killPtyTree(proc);          // SIGKILL entire process tree, not just SIGHUP the shell
     ptyProcesses.delete(sessionId);
+    ptyMeta.delete(sessionId);  // clean up metadata to prevent leaks
   }
 });
 
