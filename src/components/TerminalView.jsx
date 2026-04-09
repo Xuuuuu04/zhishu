@@ -37,13 +37,14 @@ const TOOL_VISUALS = {
   opencode: { label: 'OpenCode', color: '#f97316', glow: 'rgba(249, 115, 22, 0.35)' },
   glm:      { label: 'GLM',      color: '#a855f7', glow: 'rgba(168, 85, 247, 0.35)' },
   minimax:  { label: 'MiniMax',  color: '#ec4899', glow: 'rgba(236, 72, 153, 0.35)' },
+  kimi:     { label: 'Kimi',     color: '#0ea5e9', glow: 'rgba(14, 165, 233, 0.35)' },
 };
 
 const TOOL_INFO_BY_ID = TOOL_VISUALS;
 
 // Order buttons appear in the toolbar
 const TOOL_ORDER  = ['claude', 'codex', 'gemini', 'qwen', 'opencode'];
-const PROVIDER_ORDER = ['glm', 'minimax'];
+const PROVIDER_ORDER = ['glm', 'minimax', 'kimi'];
 
 /**
  * Build the launch command string for a tool or provider.

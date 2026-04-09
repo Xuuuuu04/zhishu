@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, nativeIma
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 
 // node-pty is a native module — loaded lazily after app is ready
 let pty;
@@ -103,13 +103,26 @@ function createWindow() {
 
   mainWindow = win;
 
-  // When the user clicks the red traffic light, hide instead of quitting
-  // (so the app keeps running in the menu bar). The actual quit is triggered
-  // by the tray "退出" menu item or app.isQuitting flag.
+  // When the user clicks the red traffic light, hide to the menu bar instead
+  // of quitting. On the FIRST time, show a one-shot info dialog so the user
+  // knows the app is still running and how to fully exit.
   win.on('close', (e) => {
     if (!app.isQuitting) {
       e.preventDefault();
       win.hide();
+
+      if (!hasShownHideHint) {
+        hasShownHideHint = true;
+        // Non-blocking — dialog.showMessageBox returns a Promise on macOS
+        dialog.showMessageBox(null, {
+          type: 'info',
+          title: '智枢正在后台运行',
+          message: '智枢已收起到菜单栏，所有 AI 会话仍在继续。',
+          detail: '点击菜单栏图标可重新打开窗口。\n右键菜单栏图标 → 退出，可完全关闭并终止所有进程。',
+          buttons: ['知道了'],
+          defaultId: 0,
+        });
+      }
     }
   });
 
@@ -265,6 +278,18 @@ const PROVIDER_CATALOG = {
       haikuModel: 'MiniMax-M2.7-highspeed',
     },
   },
+  kimi: {
+    id: 'kimi',
+    name: 'Kimi Code',
+    baseTool: 'claude',       // uses the claude binary with env overrides
+    configurable: true,       // requires user to set API key
+    defaults: {
+      baseUrl: 'https://api.kimi.com/coding',
+      opusModel: 'kimi-for-coding',
+      sonnetModel: 'kimi-for-coding',
+      haikuModel: 'kimi-for-coding',
+    },
+  },
 };
 
 function snapshotProcesses() {
@@ -392,7 +417,7 @@ async function monitorTick() {
     // declared launchedTool when we have one and the detected tool is claude.
     if (activeTool && activeTool.id === 'claude') {
       const declared = sessionLaunchedTool.get(sessionId);
-      if (declared && (declared.id === 'glm' || declared.id === 'minimax')) {
+      if (declared && (declared.id === 'glm' || declared.id === 'minimax' || declared.id === 'kimi')) {
         activeTool = { id: declared.id, label: declared.label };
       }
     }
@@ -522,6 +547,48 @@ function broadcastStatus(sessionId, status) {
 let monitorInterval = null;
 let tray = null;
 let mainWindow = null;
+let hasShownHideHint = false;  // one-time hint: "app moved to menu bar"
+
+// ─── Process cleanup helpers ──────────────────────────────────────────────────
+//
+// node-pty's proc.kill() only sends SIGHUP to the pty master. The shell exits
+// but its children (claude, codex, etc.) are reparented to init and keep running.
+// We must synchronously collect the entire process subtree and SIGKILL all of them.
+//
+// We use execFileSync (synchronous) because before-quit cannot await promises.
+function collectDescendants(rootPid) {
+  try {
+    const out = execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 2000 });
+    const byPpid = new Map();
+    for (const line of out.trim().split('\n')) {
+      const m = line.trim().match(/^(\d+)\s+(\d+)$/);
+      if (!m) continue;
+      const pid = +m[1], ppid = +m[2];
+      if (!byPpid.has(ppid)) byPpid.set(ppid, []);
+      byPpid.get(ppid).push(pid);
+    }
+    const result = [];
+    const queue = [rootPid];
+    while (queue.length) {
+      const pid = queue.shift();
+      result.push(pid);
+      for (const child of (byPpid.get(pid) || [])) queue.push(child);
+    }
+    return result;
+  } catch (_) {
+    return [rootPid];
+  }
+}
+
+function killPtyTree(ptyProc) {
+  const pids = collectDescendants(ptyProc.pid);
+  // Kill children first (reverse BFS order), then the shell itself
+  for (const pid of [...pids].reverse()) {
+    try { process.kill(pid, 'SIGKILL'); } catch (_) {}
+  }
+  // node-pty cleanup (closes file descriptors, removes from internal map)
+  try { ptyProc.kill(); } catch (_) {}
+}
 
 // ─── Tray (macOS menu bar resident) ─────────────────────────────────────────
 //
@@ -647,20 +714,24 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     if (monitorInterval) clearInterval(monitorInterval);
-    for (const [, proc] of ptyProcesses) {
-      try { proc.kill(); } catch (_) {}
-    }
+    for (const [, proc] of ptyProcesses) killPtyTree(proc);
+    ptyProcesses.clear();
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  if (monitorInterval) clearInterval(monitorInterval);
-  for (const [, proc] of ptyProcesses) {
-    try { proc.kill(); } catch (_) {}
-  }
-  if (tray) tray.destroy();
+  if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
+
+  // Kill every pty shell AND all its AI-tool children (SIGKILL for reliability)
+  for (const [, proc] of ptyProcesses) killPtyTree(proc);
+  ptyProcesses.clear();
+  ptyMeta.clear();
+  sessionStatus.clear();
+  sessionLaunchedTool.clear();
+
+  if (tray) { tray.destroy(); tray = null; }
 });
 
 // ─── IPC: System ────────────────────────────────────────────────────────────

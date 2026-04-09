@@ -91,6 +91,20 @@ export const MinimaxIcon = ({ size = 14, color = 'currentColor' }) => (
   </svg>
 );
 
+// Moonshot AI Kimi — crescent moon with a small star node (月 + 射 = Moonshot)
+// The crescent is drawn as two arcs on opposite sides of a circle, creating a
+// classic D-shaped moon. A tiny star accent sits at the upper-right tip.
+export const KimiIcon = ({ size = 14, color = 'currentColor' }) => (
+  <svg {...baseProps(size)}>
+    <g fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      {/* Crescent: outer arc (left half of circle r=8) then inner cutout arc */}
+      <path d="M 12 3 A 9 9 0 1 0 12 21 A 6 6 0 1 1 12 3 Z" />
+      {/* Small star dot at upper-right tip */}
+      <circle cx="18.5" cy="5.5" r="1" fill={color} stroke="none" />
+    </g>
+  </svg>
+);
+
 // ─── App brand logo (智枢 / ZhiShu) ──────────────────────────────────────────
 //
 // Design rationale:
@@ -273,6 +287,7 @@ export const TOOL_ICONS = {
   opencode: OpenCodeIcon,
   glm:      GlmIcon,
   minimax:  MinimaxIcon,
+  kimi:     KimiIcon,
 };
 
 export function ToolIcon({ id, size = 14, color = 'currentColor' }) {

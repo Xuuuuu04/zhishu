@@ -105,6 +105,7 @@ const TOOL_COLORS = {
   opencode: '#f97316',
   glm: '#a855f7',
   minimax: '#ec4899',
+  kimi: '#0ea5e9',
 };
 
 // Semantic phase colors
@@ -120,6 +121,7 @@ const TOOL_LABELS = {
   opencode: 'OpenCode',
   glm: 'GLM',
   minimax: 'MiniMax',
+  kimi: 'Kimi',
 };
 
 // Format milliseconds → compact "1h 23m" / "5m 12s" / "45s"

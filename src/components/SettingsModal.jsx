@@ -10,6 +10,7 @@ const TOOL_COLORS = {
   opencode: '#f97316',
   glm: '#a855f7',
   minimax: '#ec4899',
+  kimi: '#0ea5e9',
 };
 
 /**
