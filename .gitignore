@@ -1,0 +1,46 @@
+# ─── Dependencies ──────────────────────────────────────────────
+node_modules/
+
+# ─── Build artifacts ───────────────────────────────────────────
+build/
+dist/
+out/
+*.app
+*.dmg
+*.zip
+
+# ─── Native rebuild artifacts ──────────────────────────────────
+*.node
+electron/main.js.bak
+node_modules/.cache/
+
+# ─── Runtime / OS ──────────────────────────────────────────────
+.DS_Store
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# ─── Editor / IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Env / secrets (belt-and-suspenders — user configs live in ~) ─
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ─── Test coverage ─────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Temporary files ───────────────────────────────────────────
+tmp/
+temp/
+*.tmp
