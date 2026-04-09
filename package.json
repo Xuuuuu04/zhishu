@@ -49,10 +49,43 @@
     ]
   },
   "build": {
-    "appId": "com.aiterminal.manager",
-    "productName": "AI Terminal Manager",
+    "appId": "com.zhishu.app",
+    "productName": "智枢",
+    "copyright": "Copyright © 2026 Xuuuuu04",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "electron/**/*",
+      "build/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "icon": "build-assets/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "title": "智枢 ${version}",
+      "icon": "build-assets/icon.icns",
+      "contents": [
+        { "x": 130, "y": 220, "type": "file" },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 400 }
     }
   },
   "homepage": "./"

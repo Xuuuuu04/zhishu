@@ -44,3 +44,7 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# ─── Icon build intermediates (keep only icon.svg source + icon.icns final) ─
+build-assets/icon-1024.png
+build-assets/icon.iconset/
