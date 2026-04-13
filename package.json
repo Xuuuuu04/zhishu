@@ -1,6 +1,6 @@
 {
   "name": "ai-terminal-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Professional AI CLI Session Manager",
   "author": "Xuuuuu04",
   "main": "electron/main.js",
@@ -75,10 +75,24 @@
       "category": "public.app-category.developer-tools",
       "icon": "build-assets/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
+      "entitlements": "build-assets/entitlements.mac.plist",
+      "entitlementsInherit": "build-assets/entitlements.mac.plist",
       "gatekeeperAssess": false,
       "identity": null,
       "darkModeSupport": true
@@ -87,10 +101,22 @@
       "title": "智枢 ${version}",
       "icon": "build-assets/icon.icns",
       "contents": [
-        { "x": 130, "y": 220, "type": "file" },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
-      "window": { "width": 540, "height": 400 }
+      "window": {
+        "width": 540,
+        "height": 400
+      }
     }
   },
   "homepage": "./"

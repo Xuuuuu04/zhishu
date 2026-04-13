@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSessionStore, PROJECT_TEMPLATES } from '../store/sessions';
+import { TOOL_COLORS, TOOL_LABELS, PHASE_STANDBY, PHASE_REVIEW } from '../constants/toolVisuals';
 import { AppLogo, PencilIcon } from './ToolIcons';
 
 // ─── Icons (inline SVG — crisp at any scale, no external fonts) ───────────────
@@ -96,33 +97,12 @@ function EditableLabel({ value, onCommit, style }) {
   );
 }
 
-// Tool brand colors — MUST stay in sync with TerminalView.TOOL_INFO_BY_ID
-const TOOL_COLORS = {
-  claude: '#d97706',
-  codex: '#16a34a',
-  gemini: '#3b82f6',
-  qwen: '#06b6d4',
-  opencode: '#f97316',
-  glm: '#a855f7',
-  minimax: '#ec4899',
-  kimi: '#0ea5e9',
-};
+// Tool brand colors, labels, and phase colors come from
+// src/constants/toolVisuals.js — single source of truth.
 
-// Semantic phase colors
-const COLOR_STANDBY = '#64748b';   // 未指令：灰蓝色，等待你发指令
-const COLOR_REVIEW  = '#22c55e';   // 待审查：绿色，响应完成等你看
-
-// Tool display labels (used in the session sub-line)
-const TOOL_LABELS = {
-  claude: 'Claude',
-  codex: 'Codex',
-  gemini: 'Gemini',
-  qwen: 'Qwen',
-  opencode: 'OpenCode',
-  glm: 'GLM',
-  minimax: 'MiniMax',
-  kimi: 'Kimi',
-};
+// Semantic phase colors re-exported for local readability
+const COLOR_STANDBY = PHASE_STANDBY;
+const COLOR_REVIEW  = PHASE_REVIEW;
 
 // Format milliseconds → compact "1h 23m" / "5m 12s" / "45s"
 function fmtDuration(ms) {
@@ -173,15 +153,8 @@ function getPhaseIndicator(status) {
 
 // ─── Session row ──────────────────────────────────────────────────────────────
 
-function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove, status }) {
+const SessionRow = React.memo(function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove, status, now }) {
   const [hovered, setHovered] = useState(false);
-  // Tick every second so the live duration ("Claude · 02:15") updates
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    if (!status?.tool) return;  // No need to tick when nothing is running
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [status?.tool]);
 
   // ── Inline rename state (lifted out of EditableLabel for direct control) ──
   // Multiple triggers can flip into edit mode: double-click, pencil button,
@@ -337,7 +310,7 @@ function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove
       {subLine}
     </div>
   );
-}
+});
 
 // ─── Project section ──────────────────────────────────────────────────────────
 
@@ -347,6 +320,7 @@ function ProjectSection({ project, activeSessionId, sessionStatus }) {
   const {
     addSession, removeSession, renameSession, removeProject, renameProject,
     setActiveSession, updateProjectPath,
+    now,
   } = useSessionStore();
 
   const handlePickDir = async (e) => {
@@ -441,6 +415,7 @@ function ProjectSection({ project, activeSessionId, sessionStatus }) {
           onSelect={() => setActiveSession(session.id)}
           onRename={(name) => renameSession(project.id, session.id, name)}
           onRemove={() => removeSession(project.id, session.id)}
+          now={now}
         />
       ))}
     </div>

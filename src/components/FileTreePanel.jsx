@@ -43,6 +43,7 @@ function TreeNode({ item, depth, onFileSelect, gitStatusMap, rootPath, onContext
   const [collapsed, setCollapsed] = useState(true);
   const [children, setChildren] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
   const isDir = item.type === 'dir';
 
@@ -58,6 +59,7 @@ function TreeNode({ item, depth, onFileSelect, gitStatusMap, rootPath, onContext
     const res = await window.electronAPI.listDir(item.path);
     setLoading(false);
     setChildren(res?.items || []);
+    setHasMore(!!res?.hasMore);
   }, [item.path]);
 
   const toggle = useCallback(async () => {
@@ -172,6 +174,11 @@ function TreeNode({ item, depth, onFileSelect, gitStatusMap, rootPath, onContext
               refreshParent={loadChildren}
             />
           ))}
+          {hasMore && (
+            <div style={{ ...nodeStyles.emptyHint, paddingLeft: 8 + (depth + 1) * 14, color: '#3a3a3a', fontStyle: 'normal' }}>
+              ... 目录文件过多，仅显示前 500 项
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -336,6 +343,7 @@ const previewStyles = {
 
 export default function FileTreePanel({ open, cwd, onClose }) {
   const [rootItems, setRootItems] = useState([]);
+  const [rootHasMore, setRootHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [gitStatusMap, setGitStatusMap] = useState({});
@@ -355,6 +363,7 @@ export default function FileTreePanel({ open, cwd, onClose }) {
       window.electronAPI.gitStatus(cwd),
     ]);
     setRootItems(dirRes?.items || []);
+    setRootHasMore(!!dirRes?.hasMore);
 
     // Build the path → status map (only if this dir is a git repo)
     const map = {};
@@ -556,6 +565,11 @@ export default function FileTreePanel({ open, cwd, onClose }) {
             refreshParent={refresh}
           />
         ))}
+        {!loading && rootHasMore && !filter && (
+          <div style={{ ...styles.placeholder, padding: '12px 14px', fontStyle: 'normal', color: '#3a3a3a' }}>
+            ... 目录文件过多，仅显示前 500 项
+          </div>
+        )}
       </div>
 
       {/* File preview */}

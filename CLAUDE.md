@@ -131,10 +131,21 @@ npm run rebuild-native  # 重编译 node-pty（Electron 版本更新后必须）
 ```
 ai-terminal-manager/
 ├── electron/
-│   ├── main.js            # 主进程核心（~1500行）
+│   ├── main.js            # 应用入口：生命周期 + 窗口 + 模块组装（~190行）
 │   ├── preload.js         # IPC 安全桥
+│   ├── pty.js             # PTY 生命周期、共享状态、进程清理
+│   ├── monitor.js         # 进程监控 FSM（1.5s BFS tick）
+│   ├── git.js             # Git IPC handlers
+│   ├── fs-handlers.js     # 文件系统 IPC handlers
+│   ├── tray.js            # macOS 菜单栏驻留
+│   ├── tools.js           # 工具目录 + 安装 IPC handlers
+│   ├── config.js          # 配置持久化 + Keychain 迁移
 │   ├── gitStatus.js       # git status --porcelain 解析器（纯函数）
-│   └── gitStatus.test.js  # gitStatus 单元测试
+│   ├── keychain.js        # macOS Keychain 集成
+│   ├── pathValidator.js   # 文件路径验证
+│   ├── gitStatus.test.js  # gitStatus 单元测试
+│   ├── keychain.test.js   # keychain 单元测试
+│   └── pathValidator.test.js  # pathValidator 单元测试
 ├── src/
 │   ├── index.js           # 入口，字体导入，全局 CSS 变量
 │   ├── App.jsx            # 根组件，快捷键，Toast/Modal 挂载
@@ -165,4 +176,4 @@ ai-terminal-manager/
 
 ---
 
-*Auto-generated: 2026-04-13T23:18:53+08:00 by /init-project*
+*Updated: 2026-04-13 -- main.js modular refactoring*

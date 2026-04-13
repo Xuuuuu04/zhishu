@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import TerminalView from './components/TerminalView';
 import ToastStack from './components/ToastStack';
@@ -17,6 +17,14 @@ export default function App() {
     setActiveSession,
     addSessionToActiveProject, closeActiveSession, setSessionByIndex,
   } = useSessionStore();
+
+  // Single global 5s tick replacing N per-component 1s intervals.
+  // Both Sidebar (SessionRow) and TerminalView consume `now` from the store.
+  const tickNow = useSessionStore((s) => s.tickNow);
+  useEffect(() => {
+    const t = setInterval(tickNow, 5000);
+    return () => clearInterval(t);
+  }, [tickNow]);
 
   useEffect(() => { init(); }, [init]);
 
@@ -51,18 +59,42 @@ export default function App() {
   }, [addSessionToActiveProject, closeActiveSession, setSessionByIndex]);
 
   // Subscribe to per-session status updates (busy/idle phase changes)
+  // Uses diff algorithm: only subscribe new sessions, only unsubscribe removed ones.
+  const sessionSubs = useRef(new Map()); // sessionId -> unsubscribe fn
   useEffect(() => {
-    const unsubs = [];
-    projects.forEach((p) => {
-      p.sessions.forEach((s) => {
-        const unsub = window.electronAPI.onSessionStatus(s.id, (status) => {
-          updateSessionStatus(s.id, status);
+    const currentIds = new Set(
+      projects.flatMap((p) => p.sessions.map((s) => s.id))
+    );
+    const prev = sessionSubs.current;
+
+    // Unsubscribe removed sessions
+    for (const [id, unsub] of prev) {
+      if (!currentIds.has(id)) {
+        unsub?.();
+        prev.delete(id);
+      }
+    }
+
+    // Subscribe new sessions
+    for (const id of currentIds) {
+      if (!prev.has(id)) {
+        const unsub = window.electronAPI.onSessionStatus(id, (status) => {
+          updateSessionStatus(id, status);
         });
-        unsubs.push(unsub);
-      });
-    });
-    return () => { unsubs.forEach((u) => u?.()); };
+        prev.set(id, unsub);
+      }
+    }
   }, [projects, updateSessionStatus]);
+
+  // Cleanup all session subscriptions on unmount
+  useEffect(() => {
+    return () => {
+      for (const [, unsub] of sessionSubs.current) {
+        unsub?.();
+      }
+      sessionSubs.current.clear();
+    };
+  }, []);
 
   // Global subscription: AI response-complete events → toast + sound
   // This is the key "awareness" mechanism — fires every time an AI finishes

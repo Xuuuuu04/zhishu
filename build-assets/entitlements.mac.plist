@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hardened Runtime Entitlements for ZhiShu (AI Terminal Manager)
+
+    These entitlements are required because:
+    1. node-pty is a native Node.js addon (.node dylib) loaded at runtime
+    2. Electron's V8 engine needs JIT compilation
+    3. The app spawns child processes (ps, git, security, sips, zip)
+    4. AI provider APIs are called over HTTPS (GLM, MiniMax, Kimi)
+  -->
+
+  <!-- V8 JIT compilation (Electron renderer + node-pty) -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- Electron renderer process needs unsigned executable memory -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- Load native modules (node-pty .node dylib) not signed by Apple -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- Allow DYLD_* environment variables for native module resolution -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+
+  <!-- Outbound network for AI provider API calls -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

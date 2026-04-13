@@ -11,6 +11,13 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { ToolIcon, BellIcon, BellMutedIcon, PinIcon, GearIcon, TreeIcon, GitBranchIcon } from './ToolIcons';
 import { useSessionStore } from '../store/sessions';
+import {
+  TOOL_VISUALS,
+  PHASE_STANDBY,
+  PHASE_REVIEW,
+  TOOL_ORDER,
+  PROVIDER_ORDER,
+} from '../constants/toolVisuals';
 import FileTreePanel from './FileTreePanel';
 import GitPanel from './GitPanel';
 
@@ -25,26 +32,10 @@ import GitPanel from './GitPanel';
 // ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN and then call `claude`. For them to
 // work, the pty must be spawned as an interactive login shell (handled in main.js).
 
-// ─── Visual metadata per tool / provider ────────────────────────────────────
-// The commands/yolo flags themselves come from the catalog in the main process;
-// only the visual properties (color, glow) are defined here.
-
-const TOOL_VISUALS = {
-  claude:   { label: 'Claude',   color: '#d97706', glow: 'rgba(217, 119, 6, 0.35)' },
-  codex:    { label: 'Codex',    color: '#16a34a', glow: 'rgba(22, 163, 74, 0.35)' },
-  gemini:   { label: 'Gemini',   color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.35)' },
-  qwen:     { label: 'Qwen',     color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.35)' },
-  opencode: { label: 'OpenCode', color: '#f97316', glow: 'rgba(249, 115, 22, 0.35)' },
-  glm:      { label: 'GLM',      color: '#a855f7', glow: 'rgba(168, 85, 247, 0.35)' },
-  minimax:  { label: 'MiniMax',  color: '#ec4899', glow: 'rgba(236, 72, 153, 0.35)' },
-  kimi:     { label: 'Kimi',     color: '#0ea5e9', glow: 'rgba(14, 165, 233, 0.35)' },
-};
+// Visual metadata (TOOL_VISUALS) and toolbar ordering (TOOL_ORDER, PROVIDER_ORDER)
+// are defined in src/constants/toolVisuals.js — single source of truth.
 
 const TOOL_INFO_BY_ID = TOOL_VISUALS;
-
-// Order buttons appear in the toolbar
-const TOOL_ORDER  = ['claude', 'codex', 'gemini', 'qwen', 'opencode'];
-const PROVIDER_ORDER = ['glm', 'minimax', 'kimi'];
 
 /**
  * Build the launch command string for a tool or provider.
@@ -90,10 +81,6 @@ function buildLaunchCommand({ kind, tool, provider, yoloMode, continueMode, tool
   }
   return null;
 }
-
-// Semantic phase colors (keep in sync with Sidebar)
-const PHASE_STANDBY = '#64748b';  // 未指令
-const PHASE_REVIEW  = '#22c55e';  // 运行后待审查
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -348,15 +335,24 @@ export default function TerminalView({
   const sessionLastToolRef = useRef(sessionLastTool);
   const autoRestoreSessionsRef = useRef(false);
   const [hoveredTool, setHoveredTool] = useState(null);
-  const [now, setNow] = useState(Date.now());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Tick every second to update the running-duration displays
+  // ── Restore terminal focus when search bar closes ────────────────────────
+  // When searchOpen transitions from true to false, the search <input> is
+  // unmounted by React. If we call term.focus() synchronously inside the
+  // close handler, the subsequent re-render removes the input and focus
+  // lands on document.body instead. Using a useEffect ensures we refocus
+  // AFTER the DOM has settled.
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+    if (!searchOpen && termRef.current) {
+      // requestAnimationFrame ensures React has finished unmounting the
+      // search bar and the DOM is stable before we grab focus.
+      requestAnimationFrame(() => {
+        termRef.current?.focus();
+      });
+    }
+  }, [searchOpen]);
 
   // ── Window focus restoration ───────────────────────────────────────────────
   //
@@ -407,6 +403,7 @@ export default function TerminalView({
   const toggleGitPanel = useSessionStore((s) => s.toggleGitPanel);
   const closeGitPanel = useSessionStore((s) => s.closeGitPanel);
   const autoRestoreSessions = useSessionStore((s) => s.autoRestoreSessions);
+  const now = useSessionStore((s) => s.now);
 
   useEffect(() => { toolCatalogRef.current = toolCatalog; }, [toolCatalog]);
   useEffect(() => { sessionLastToolRef.current = sessionLastTool; }, [sessionLastTool]);
@@ -1007,7 +1004,6 @@ export default function TerminalView({
                 setSearchOpen(false);
                 setSearchQuery('');
                 searchAddonRef.current?.clearDecorations();
-                termRef.current?.focus();
               }
             }}
             style={styles.searchInput}
@@ -1028,7 +1024,6 @@ export default function TerminalView({
               setSearchOpen(false);
               setSearchQuery('');
               searchAddonRef.current?.clearDecorations();
-              termRef.current?.focus();
             }}
             title="关闭 (Esc)"
           >×</button>

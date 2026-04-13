@@ -1,16 +1,5 @@
 import React, { useEffect } from 'react';
-
-// Must stay in sync with TerminalView's TOOL_INFO_BY_ID
-const TOOL_COLORS = {
-  claude: '#d97706',
-  codex: '#16a34a',
-  gemini: '#3b82f6',
-  qwen: '#06b6d4',
-  opencode: '#f97316',
-  glm: '#a855f7',
-  minimax: '#ec4899',
-  kimi: '#0ea5e9',
-};
+import { TOOL_COLORS } from '../constants/toolVisuals';
 
 const AUTO_DISMISS_MS = 6000;
 

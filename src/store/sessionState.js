@@ -21,7 +21,8 @@ function resolveProjects(projects, fallbackProjects) {
 }
 
 function resolveTheme(theme) {
-  return theme === 'dark' ? 'dark' : 'dark';
+  if (theme === 'light') return 'light';
+  return 'dark';
 }
 
 function resolveActiveSessionId(projects, preferredSessionId) {

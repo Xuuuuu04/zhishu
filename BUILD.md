@@ -90,8 +90,9 @@ cp -R "dist/mac-arm64/智枢.app" /Applications/
 | `mac.icon` | `build-assets/icon.icns` | 应用图标 |
 | `mac.category` | `public.app-category.developer-tools` | 分类（用于 Launchpad / App Store）|
 | `mac.target` | `dmg` + `zip` | 两种分发格式 |
-| `mac.hardenedRuntime` | `false` | 不强化（开发模式）|
-| `mac.identity` | `null` | 不签名 |
+| `mac.hardenedRuntime` | `true` | 启用 hardened runtime（配合 entitlements）|
+| `mac.entitlements` | `build-assets/entitlements.mac.plist` | 运行时权限声明 |
+| `mac.identity` | `null` | 不强制签名（无 Apple Developer 证书时使用 ad-hoc）|
 | `mac.darkModeSupport` | `true` | 原生支持系统深色模式 |
 
 ## 代码签名（生产发布）
@@ -101,8 +102,20 @@ cp -R "dist/mac-arm64/智枢.app" /Applications/
 1. 申请 [Apple Developer Program](https://developer.apple.com/programs/)（$99/年）
 2. 在 Keychain Access 安装 Developer ID Application 证书
 3. 在 `package.json` 的 `build.mac` 中设置 `identity: "Developer ID Application: Your Name (TEAM_ID)"`
-4. 打开 `hardenedRuntime: true`
+4. hardened runtime 已启用，entitlements 已配置在 `build-assets/entitlements.mac.plist`
 5. 添加 `notarize` 配置 + Apple ID 应用专用密码
 6. 重新打包
 
 详见 [electron-builder 公证文档](https://www.electron.build/code-signing.html)。
+
+## Entitlements 说明
+
+`build-assets/entitlements.mac.plist` 声明了应用在 hardened runtime 下需要的权限：
+
+| Entitlement | 原因 |
+|---|---|
+| `allow-jit` | Electron V8 引擎 JIT 编译 + node-pty |
+| `allow-unsigned-executable-memory` | Electron 渲染器进程需要可执行内存 |
+| `disable-library-validation` | 加载 node-pty 等非 Apple 签名的原生 .node 模块 |
+| `allow-dyld-environment-variables` | 原生模块的 DYLD_* 路径解析 |
+| `network.client` | 出站 HTTPS 调用 AI Provider API（GLM / MiniMax / Kimi）|

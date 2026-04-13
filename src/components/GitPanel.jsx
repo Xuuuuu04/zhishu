@@ -89,9 +89,52 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
       return;
     }
     // Use a subshell so the cd doesn't pollute the user's pty
-    const fullCmd = `(cd '${repoPath.replace(/'/g, "'\\''")}' && ${command})`;
+    const fullCmd = `(cd ${shellQuote(repoPath)} && ${command})`;
     window.electronAPI.gitRunInSession(sessionId, fullCmd);
     setTimeout(scanRepos, 1500);
+  };
+
+  /**
+   * Sanitize a commit message to prevent shell injection via pty:write.
+   *
+   * The command is sent into a shell via `proc.write()`.  POSIX single-quote
+   * escaping alone (the `'\''` trick) is insufficient when the message also
+   * contains shell operators (`;`, `&`, `|`) that leak out of the quoted
+   * segment at each `'\''` boundary.
+   *
+   * Strategy: strip shell-active characters BEFORE quoting, then apply POSIX
+   * single-quote escaping as defence in depth.
+   *
+   * Characters removed (and why):
+   *   ` $ \   -- command substitution, variable expansion, escape
+   *   | & ;   -- command chaining / backgrounding
+   *   < >     -- I/O redirection
+   *   !       -- history expansion (bash) / event designator
+   *
+   * Characters preserved: Unicode text (CJK, Latin, etc.), digits, space,
+   * and common conventional-commit punctuation:  - : . / _ ( ) [ ] , # @ % + = ~ ? '
+   */
+  const sanitizeCommitMessage = (raw) => {
+    return raw
+      .replace(/[`$\\|&;!<>]/g, '')
+      .replace(/'/g, "'\\''")
+      .trim();
+  };
+
+  /**
+   * Sanitize a string for safe inclusion in a POSIX single-quoted context.
+   *
+   * Used for branch names, file paths, and other user-controlled values that
+   * are interpolated into git commands sent to the pty shell.
+   *
+   * POSIX single-quoting rules: the only character that needs escaping inside
+   * single quotes is the single quote itself, which is handled by the
+   * `'\''` idiom (end quote, literal escaped quote, reopen quote).
+   *
+   * This wrapper ensures the value is always wrapped in single quotes.
+   */
+  const shellQuote = (raw) => {
+    return `'${raw.replace(/'/g, "'\\''")}'`;
   };
 
   const isRepo = status?.isRepo;
@@ -103,7 +146,8 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
       confirmLabel: '提交',
     });
     if (!msg) return;
-    const escaped = msg.replace(/'/g, "'\\''");
+    const escaped = sanitizeCommitMessage(msg);
+    if (!escaped) return;
     runInSession(`git commit -m '${escaped}'`);
   };
 
@@ -241,6 +285,15 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
 
 // ─── Multi-repo scan mode ───────────────────────────────────────────────────
 
+/**
+ * POSIX single-quote a raw string (safe for pty shell injection).
+ * Duplicate of the component-scoped version, extracted for use by
+ * child components that don't have access to the parent's closure.
+ */
+function shellQuote(raw) {
+  return `'${raw.replace(/'/g, "'\\''")}'`;
+}
+
 function ScanModeView({ scanResult, scanning, onRefresh, runInRepoSession }) {
   if (scanning && !scanResult) {
     return (
@@ -295,7 +348,7 @@ function ScanModeView({ scanResult, scanning, onRefresh, runInRepoSession }) {
             // Pull all dirty-free repos in parallel? — too aggressive.
             // Instead pull every repo sequentially via a single shell command.
             const cmds = scanResult.repos
-              .map((r) => `(cd '${r.path.replace(/'/g, "'\\''")}' && git pull)`)
+              .map((r) => `(cd ${shellQuote(r.path)} && git pull)`)
               .join(' ; ');
             runInRepoSession(scanResult.rootDir, cmds);
           }}
@@ -307,7 +360,7 @@ function ScanModeView({ scanResult, scanning, onRefresh, runInRepoSession }) {
           style={styles.actionBtn}
           onClick={() => {
             const cmds = scanResult.repos
-              .map((r) => `(cd '${r.path.replace(/'/g, "'\\''")}' && git fetch)`)
+              .map((r) => `(cd ${shellQuote(r.path)} && git fetch)`)
               .join(' ; ');
             runInRepoSession(scanResult.rootDir, cmds);
           }}
@@ -500,7 +553,7 @@ function BranchesTab({ branches, runInSession }) {
         <div
           key={b.name}
           style={{ ...styles.branchRow, color: b.current ? '#f59e0b' : '#888' }}
-          onClick={() => !b.current && runInSession(`git checkout ${b.name}`)}
+          onClick={() => !b.current && runInSession(`git checkout ${shellQuote(b.name)}`)}
         >
           <span>{b.current ? '●' : '○'}</span>
           <span>{b.name}</span>

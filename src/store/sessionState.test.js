@@ -60,8 +60,9 @@ test('uses fallback projects only when the stored list is empty', () => {
   assert.equal(resolveProjects([], fallback), fallback);
 });
 
-test('forces unsupported themes back to dark', () => {
+test('resolves theme correctly', () => {
   assert.equal(resolveTheme('dark'), 'dark');
-  assert.equal(resolveTheme('light'), 'dark');
+  assert.equal(resolveTheme('light'), 'light');
   assert.equal(resolveTheme(undefined), 'dark');
+  assert.equal(resolveTheme('system'), 'dark');
 });

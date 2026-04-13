@@ -143,6 +143,12 @@ export const useSessionStore = create((set, get) => ({
   // Real-time process status: sessionId -> { tool, label, startedAt, lastRanTool, lastDuration }
   sessionStatus: {},
 
+  // Global clock tick — updated every 5s by App-level interval.
+  // Consumed by Sidebar SessionRow and TerminalView for elapsed-time displays.
+  // Single source of truth replaces N per-component 1s intervals.
+  now: Date.now(),
+  tickNow: () => set({ now: Date.now() }),
+
   // Tool catalog fetched from main process (never hardcoded in renderer)
   toolCatalog: { tools: {}, providers: {} },
   // Installation status: toolId -> { installed, version }

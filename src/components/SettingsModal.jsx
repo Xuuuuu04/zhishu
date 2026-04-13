@@ -1,17 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSessionStore } from '../store/sessions';
-
-// Display colors for each tool — kept in sync with TerminalView
-const TOOL_COLORS = {
-  claude: '#d97706',
-  codex: '#16a34a',
-  gemini: '#3b82f6',
-  qwen: '#06b6d4',
-  opencode: '#f97316',
-  glm: '#a855f7',
-  minimax: '#ec4899',
-  kimi: '#0ea5e9',
-};
+import { TOOL_COLORS } from '../constants/toolVisuals';
 
 /**
  * Modal overlay for configuring providers + viewing tool installation status.
@@ -451,14 +440,12 @@ function AppearanceTab({ theme, setTheme, autoRestoreSessions, toggleAutoRestore
           id="light"
           label="浅色"
           active={theme === 'light'}
-          onClick={() => {}}
+          onClick={() => setTheme('light')}
           colors={['#f8fafc', '#ffffff', '#d97706']}
-          wip
-          disabled
         />
       </div>
       <p style={styles.hintDim}>
-        浅色主题尚未完成，当前已禁用选择；完整支持需要后续把所有组件颜色迁移到 CSS 变量。
+        浅色主题已支持基础界面（侧边栏、工具栏、状态栏）。部分组件仍有硬编码颜色，将在后续版本逐步迁移。
       </p>
 
       {/* Section divider */}

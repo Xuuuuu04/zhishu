@@ -1,122 +1,155 @@
 # electron/ - Main Process
 
-> [← 返回根目录](../CLAUDE.md)
+> [<< Back to root](../CLAUDE.md)
 
-Electron 主进程模块。所有 pty、文件系统、git、进程监控、系统通知、Tray 驻留都在这里。
+Electron main process modules. All pty, filesystem, git, process monitoring, system notifications, and tray resident logic live here.
 
 ---
 
-## 文件清单
+## File List
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `main.js` | ~1500 | 主进程核心：BrowserWindow、pty 生命周期、进程监控 FSM、IPC handlers、Git wrapper、FS 操作、Tray |
-| `preload.js` | ~103 | contextBridge 白名单 API surface |
-| `gitStatus.js` | ~88 | `git status --porcelain=v1 -b` 输出解析器（纯函数，无 I/O） |
-| `gitStatus.test.js` | ~54 | gitStatus 单元测试 |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `main.js` | ~190 | App lifecycle, BrowserWindow creation, module assembly |
+| `preload.js` | ~103 | contextBridge whitelist API surface |
+| `pty.js` | ~315 | PTY lifecycle, shared state maps, process cleanup, shell helpers |
+| `monitor.js` | ~230 | Process monitor FSM (1.5s BFS tick) |
+| `git.js` | ~150 | Git IPC handlers |
+| `fs-handlers.js` | ~310 | File system IPC handlers |
+| `tray.js` | ~85 | macOS menu bar resident |
+| `tools.js` | ~160 | Tool catalog + installation IPC handlers |
+| `config.js` | ~100 | Config persistence + Keychain migration |
+| `gitStatus.js` | ~88 | `git status --porcelain=v1 -b` output parser (pure functions, no I/O) |
+| `gitStatus.test.js` | ~54 | gitStatus unit tests |
+| `keychain.js` | ~248 | macOS Keychain integration for secure API key storage |
+| `keychain.test.js` | - | keychain unit tests |
+| `pathValidator.js` | ~95 | File path validation for IPC security |
+| `pathValidator.test.js` | - | pathValidator unit tests |
 
-## 核心数据结构
+## Module Dependency Graph
+
+```
+main.js
+  +-- config.js           (loadConfigAsync, loadConfig, saveConfigAsync)
+  +-- pty.js              (loadPtyModule, initPtyIPC, ptyProcesses, killPtyTree, cleanupAll)
+  |     +-- keychain.js   (migrateKeysFromConfig, extractAndStoreKeys, restoreKeysIntoConfig)
+  +-- monitor.js          (monitorTick)
+  |     +-- pty.js        (reads shared maps + broadcastStatus, broadcastResponseComplete)
+  +-- git.js              (initGitIPC)
+  |     +-- pty.js        (interruptAndRunInShell)
+  |     +-- gitStatus.js  (parseGitStatus)
+  +-- fs-handlers.js      (initFsIPC)
+  |     +-- pathValidator.js (validatePath)
+  +-- tray.js             (createTray, refreshTrayMenu, destroyTray)
+  |     +-- pty.js        (reads sessionStatus)
+  +-- tools.js            (initToolsIPC)
+        +-- pty.js        (interruptAndRunInShell)
+```
+
+**Shared state ownership**: `pty.js` owns all core Maps (ptyProcesses, ptyMeta, sessionStatus, sessionLaunchedTool, notifyTimers, sessionNames). Other modules import these references and read/mutate through them. Primitive state (notificationsEnabled) is exported via getter/setter functions to avoid stale value copies.
+
+## Core Data Structures
 
 ### ptyProcesses: `Map<sessionId, ptyProcess>`
-所有活跃的 node-pty 进程。key 是 UUID string。
+All active node-pty processes. Key is UUID string.
 
 ### ptyMeta: `Map<sessionId, { lastOutputAt: number, hasUserInput: boolean }>`
-- `lastOutputAt`: 最近一次 stdout 时间戳，用于检测 busy/idle 转换
-- `hasUserInput`: 用户是否按过 Enter（区分"未指令" vs "待审查"）
+- `lastOutputAt`: Most recent stdout timestamp, used to detect busy/idle transitions
+- `hasUserInput`: Whether user has pressed Enter (distinguishes "never instructed" vs "finished instruction")
 
 ### sessionStatus: `Map<sessionId, { tool, label, phase, startedAt, runningStartedAt, lastRanTool, lastDuration }>`
-四态状态机输出。`phase ∈ { not_started, idle_no_instruction, running, awaiting_review }`
+Four-state FSM output. `phase in { not_started, idle_no_instruction, running, awaiting_review }`
 
 ### sessionLaunchedTool: `Map<sessionId, { id, label }>`
-声明意图：区分 GLM/MiniMax/Kimi（都 spawn 同一个 `claude` 二进制）。monitorTick 优先使用此值。
+Declared intent: distinguishes GLM/MiniMax/Kimi (all spawn the same `claude` binary). monitorTick prefers this value.
 
 ### notifyTimers: `Map<sessionId, setTimeout handle>`
-debounce 通知定时器。running → awaiting_review 启动，3.5s 后确认仍 idle 才发通知。
+Debounced notification timers. running -> awaiting_review starts one; fires only if still idle after 3.5s.
 
-## IPC Handler 分类
+## IPC Handler Classification
 
-### PTY 生命周期
-| Channel | 方向 | 说明 |
-|---------|------|------|
-| `pty:create` | invoke | 创建 pty（已有则 reuse，React 18 strict mode 兼容） |
-| `pty:write` | send | 写入数据（同时检测 Enter → hasUserInput） |
-| `pty:resize` | send | 调整终端尺寸 |
-| `pty:kill` | send | killPtyTree（递归 SIGKILL） |
-| `pty:launch` | send | 在 pty 中启动 AI 工具（声明 toolId） |
-| `pty:insertText` | send | 插入文本（拖拽文件路径用） |
-| `pty:data:{id}` | send (→renderer) | 终端输出 |
-| `pty:exit:{id}` | send (→renderer) | 进程退出 |
+### PTY Lifecycle (registered in `pty.js`)
+| Channel | Direction | Description |
+|---------|-----------|-------------|
+| `pty:create` | invoke | Create pty (reuse if exists, React 18 strict mode compatible) |
+| `pty:write` | send | Write data (also detects Enter -> hasUserInput) |
+| `pty:resize` | send | Resize terminal |
+| `pty:kill` | send | killPtyTree (recursive SIGKILL) |
+| `pty:launch` | send | Launch AI tool in pty (declares toolId) |
+| `pty:insertText` | send | Insert text (drag-drop file paths) |
+| `pty:data:{id}` | send (->renderer) | Terminal output |
+| `pty:exit:{id}` | send (->renderer) | Process exit |
 
-### 进程监控
-| Channel | 方向 | 说明 |
-|---------|------|------|
-| `session:status:{id}` | send (→renderer) | 状态变更广播 |
-| `session:responseComplete` | send (→renderer) | AI 完成响应（debounce 后） |
-| `session:updateNames` | send | 同步会话友好名 |
-| `session:cleanup` | send | 清理会话状态 |
+### Process Monitoring (broadcast from `monitor.js` via `pty.js` helpers)
+| Channel | Direction | Description |
+|---------|-----------|-------------|
+| `session:status:{id}` | send (->renderer) | State change broadcast |
+| `session:responseComplete` | send (->renderer) | AI finished responding (after debounce) |
+| `session:updateNames` | send | Sync friendly session names |
+| `session:cleanup` | send | Clean up session state |
 
-### Git
-| Channel | 方向 | 说明 |
-|---------|------|------|
+### Git (registered in `git.js`)
+| Channel | Direction | Description |
+|---------|-----------|-------------|
 | `git:status` | invoke | `git status --porcelain=v1 -b` |
 | `git:branches` | invoke | `git branch -a` |
-| `git:log` | invoke | `git log`（NUL 分隔自定义格式） |
+| `git:log` | invoke | `git log` (NUL-separated custom format) |
 | `git:fileDiff` | invoke | `git diff -- <path>` |
-| `git:scanRepos` | invoke | 递归扫描所有 git 仓库（深度 4） |
-| `git:runInSession` | send | 在 pty 中执行 git 命令 |
+| `git:scanRepos` | invoke | Recursively scan all git repos (depth 4) |
+| `git:runInSession` | send | Execute git command in pty |
 
-### 文件系统
-| Channel | 方向 | 说明 |
-|---------|------|------|
-| `fs:listDir` | invoke | 懒加载目录列表 |
-| `fs:readFilePreview` | invoke | 文件前 10KB 预览 |
-| `fs:exists` | invoke | 文件存在检查 |
-| `fs:writeFile` | invoke | 写文件（模板系统用） |
-| `fs:trash` | invoke | 移到废纸篓 |
-| `fs:rename` | invoke | 重命名（防路径遍历） |
-| `fs:copy` | invoke | 递归复制 |
-| `fs:move` | invoke | 移动（跨文件系统 fallback copy+delete） |
-| `fs:zip` | invoke | 系统 zip 命令压缩 |
-| `fs:newFile` / `fs:newFolder` | invoke | 创建空文件/目录 |
-| `fs:convertHeic` | invoke | HEIC → PNG（sips） |
-| `fs:normalizeImage` | invoke | 通用图片 → PNG |
-| `fs:stat` | invoke | 文件元信息 |
-| `fs:reveal` | invoke | Finder 显示 |
-| `fs:openFile` | invoke | 默认应用打开 |
+### File System (registered in `fs-handlers.js`)
+| Channel | Direction | Description |
+|---------|-----------|-------------|
+| `fs:listDir` | invoke | Lazy directory listing |
+| `fs:readFilePreview` | invoke | First 10KB file preview |
+| `fs:exists` | invoke | File existence check |
+| `fs:writeFile` | invoke | Write file (template system) |
+| `fs:trash` | invoke | Move to Trash |
+| `fs:rename` | invoke | Rename (path traversal prevention) |
+| `fs:copy` | invoke | Recursive copy |
+| `fs:move` | invoke | Move (cross-filesystem fallback copy+delete) |
+| `fs:zip` | invoke | System zip command |
+| `fs:newFile` / `fs:newFolder` | invoke | Create empty file/directory |
+| `fs:convertHeic` | invoke | HEIC -> PNG (sips) |
+| `fs:normalizeImage` | invoke | Generic image -> PNG |
+| `fs:stat` | invoke | File metadata |
+| `fs:reveal` | invoke | Reveal in Finder |
+| `fs:openFile` | invoke | Open with default app |
 
-### 配置 / 工具 / 窗口
-| Channel | 方向 | 说明 |
-|---------|------|------|
-| `config:load` / `config:save` | invoke | 持久化到 `~/.ai-terminal-manager.json` |
-| `tools:catalog` | invoke | 返回 TOOL_CATALOG + PROVIDER_CATALOG |
-| `tools:checkAll` | invoke | 并行检测所有工具安装状态 |
-| `tools:installInSession` | send | 在 pty 中安装/升级工具 |
-| `window:toggleAlwaysOnTop` | invoke | 窗口置顶 |
-| `dialog:selectDir` | invoke | 目录选择对话框 |
+### Config / Tools / Window (registered in `main.js` and `tools.js`)
+| Channel | Direction | Description |
+|---------|-----------|-------------|
+| `config:load` / `config:save` | invoke | Persist to `~/.ai-terminal-manager.json` |
+| `tools:catalog` | invoke | Return TOOL_CATALOG + PROVIDER_CATALOG |
+| `tools:checkAll` | invoke | Check all tools installation status in parallel |
+| `tools:installInSession` | send | Install/upgrade tool in pty |
+| `window:toggleAlwaysOnTop` | invoke | Toggle always-on-top |
+| `dialog:selectDir` | invoke | Directory selection dialog |
 
-## 关键常量
+## Key Constants
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `IDLE_SILENCE_MS` | 3000 | 输出静默阈值（超过此值认为 AI 停止输出） |
-| `NOTIFY_DEBOUNCE_MS` | 3500 | 通知 debounce（确认仍 idle 才触发） |
-| `CONFIG_PATH` | `~/.ai-terminal-manager.json` | 用户配置持久化路径 |
-| Monitor interval | 1500ms | 进程扫描频率 |
-| Scan max depth | 4 | Git 仓库递归扫描深度 |
-| `IGNORED_DIRS` | node_modules, .git, dist, build... | 文件树/扫描忽略目录 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `IDLE_SILENCE_MS` | 3000 | Output silence threshold (exceed = AI stopped outputting) |
+| `NOTIFY_DEBOUNCE_MS` | 3500 | Notification debounce (confirm still idle before triggering) |
+| `CONFIG_PATH` | `~/.ai-terminal-manager.json` | User config persistence path |
+| Monitor interval | 1500ms | Process scan frequency |
+| Scan max depth | 4 | Git repo recursive scan depth |
+| `IGNORED_DIRS` | node_modules, .git, dist, build... | File tree/scan ignored directories |
 
-## 依赖
+## Dependencies
 
-- `electron` (^31.0.0) — BrowserWindow, IPC, Tray, Notification
-- `node-pty` (^1.1.0) — 原生 PTY 绑定（延迟加载，app ready 后 require）
-- Node.js 内置: `child_process` (execFile/execFileSync), `fs`, `path`, `os`
+- `electron` (^31.0.0) -- BrowserWindow, IPC, Tray, Notification
+- `node-pty` (^1.1.0) -- Native PTY binding (lazy-loaded after app ready)
+- Node.js built-in: `child_process` (execFile/execFileSync), `fs`, `path`, `os`
 
-## 新增 IPC Handler 检查清单
-1. 在 `main.js` 注册 `ipcMain.handle` 或 `ipcMain.on`
-2. 在 `preload.js` 的 `contextBridge.exposeInMainWorld` 中暴露
-3. 如果涉及 Renderer 调用，在组件中通过 `window.electronAPI.xxx` 使用
-4. 安全审查：参数验证、路径遍历防护、无 shell 注入
+## Adding a New IPC Handler Checklist
+1. Register `ipcMain.handle` or `ipcMain.on` in the appropriate module's `initXxxIPC()` function (or `initSystemIPC()` in main.js for system/window/config handlers)
+2. Expose in `preload.js` within `contextBridge.exposeInMainWorld`
+3. If involving Renderer calls, use via `window.electronAPI.xxx` in components
+4. Security review: parameter validation, path traversal prevention, no shell injection
 
 ---
 
-*Auto-generated: 2026-04-13T23:18:53+08:00 by /init-project*
+*Updated: 2026-04-13 -- main.js modular refactoring*

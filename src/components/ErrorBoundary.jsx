@@ -3,6 +3,10 @@ import React from 'react';
 /**
  * Top-level error boundary — catches render errors and shows them
  * instead of leaving a black screen with no feedback.
+ *
+ * Provides two recovery paths:
+ *  - "Retry Render": resets error state so React re-renders the children
+ *  - "Reload Window": calls window.location.reload() for a full reset
  */
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -19,6 +23,14 @@ export default class ErrorBoundary extends React.Component {
     console.error('[ErrorBoundary]', error.message, info.componentStack);
   }
 
+  handleRetry = () => {
+    this.setState({ error: null });
+  };
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
   render() {
     if (this.state.error) {
       return (
@@ -27,6 +39,14 @@ export default class ErrorBoundary extends React.Component {
           <p style={styles.title}>Render Error</p>
           <pre style={styles.message}>{this.state.error.message}</pre>
           <pre style={styles.stack}>{this.state.error.stack}</pre>
+          <div style={styles.actions}>
+            <button style={styles.btnRetry} onClick={this.handleRetry}>
+              Retry Render
+            </button>
+            <button style={styles.btnReload} onClick={this.handleReload}>
+              Reload Window
+            </button>
+          </div>
         </div>
       );
     }
@@ -63,5 +83,32 @@ const styles = {
     maxHeight: 300,
     overflow: 'auto',
     whiteSpace: 'pre-wrap',
+  },
+  actions: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 8,
+  },
+  btnRetry: {
+    background: '#151515',
+    border: '1px solid #2a2a2a',
+    borderRadius: 5,
+    color: '#888',
+    fontSize: 12,
+    padding: '6px 16px',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-ui), system-ui, sans-serif',
+    fontWeight: 500,
+  },
+  btnReload: {
+    background: '#1a150a',
+    border: '1px solid #3a2e0a',
+    borderRadius: 5,
+    color: '#f59e0b',
+    fontSize: 12,
+    padding: '6px 18px',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-ui), system-ui, sans-serif',
+    fontWeight: 600,
   },
 };
