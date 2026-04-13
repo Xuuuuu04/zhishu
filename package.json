@@ -2,13 +2,17 @@
   "name": "ai-terminal-manager",
   "version": "1.0.0",
   "description": "Professional AI CLI Session Manager",
+  "author": "Xuuuuu04",
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && NODE_ENV=development electron .\"",
     "react-start": "react-scripts start",
+    "test": "node --test electron/*.test.js src/store/*.test.js",
+    "rebuild-native": "npx electron-rebuild -f -w node-pty",
     "build": "react-scripts build",
     "electron": "electron .",
-    "package": "npm run build && electron-builder"
+    "verify:desktop": "npm run rebuild-native && npm run build && electron-builder --dir",
+    "package": "npm run rebuild-native && npm run build && electron-builder"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -49,6 +53,7 @@
     ]
   },
   "build": {
+    "extends": null,
     "appId": "com.zhishu.app",
     "productName": "智枢",
     "copyright": "Copyright © 2026 Xuuuuu04",

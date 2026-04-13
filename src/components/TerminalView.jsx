@@ -341,6 +341,12 @@ export default function TerminalView({
   const unsubDataRef = useRef(null);
   const unsubExitRef = useRef(null);
   const initializedRef = useRef(false);
+  const restoreTimerRef = useRef(null);
+  const ptyReadyRef = useRef(false);
+  const pendingInputRef = useRef([]);
+  const toolCatalogRef = useRef({ tools: {}, providers: {} });
+  const sessionLastToolRef = useRef(sessionLastTool);
+  const autoRestoreSessionsRef = useRef(false);
   const [hoveredTool, setHoveredTool] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [searchOpen, setSearchOpen] = useState(false);
@@ -401,6 +407,10 @@ export default function TerminalView({
   const toggleGitPanel = useSessionStore((s) => s.toggleGitPanel);
   const closeGitPanel = useSessionStore((s) => s.closeGitPanel);
   const autoRestoreSessions = useSessionStore((s) => s.autoRestoreSessions);
+
+  useEffect(() => { toolCatalogRef.current = toolCatalog; }, [toolCatalog]);
+  useEffect(() => { sessionLastToolRef.current = sessionLastTool; }, [sessionLastTool]);
+  useEffect(() => { autoRestoreSessionsRef.current = autoRestoreSessions; }, [autoRestoreSessions]);
 
   // ── Initialize terminal ────────────────────────────────────────────────────
 
@@ -499,9 +509,15 @@ export default function TerminalView({
     fitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
     webglAddonRef.current = webglAddon;
+    ptyReadyRef.current = false;
+    pendingInputRef.current = [];
 
     // Forward user keystrokes to the pty
     term.onData((data) => {
+      if (!ptyReadyRef.current) {
+        pendingInputRef.current.push(data);
+        return;
+      }
       window.electronAPI.writePty(sessionId, data);
     });
 
@@ -509,8 +525,16 @@ export default function TerminalView({
     const { cols, rows } = term;
     const result = await window.electronAPI.createPty({ sessionId, cwd, cols, rows });
     if (result?.error) {
+      initializedRef.current = false;
       term.write(`\r\n\x1b[31m[Error] ${result.error}\x1b[0m\r\n`);
       return;
+    }
+    ptyReadyRef.current = true;
+
+    if (pendingInputRef.current.length > 0) {
+      const bufferedInput = pendingInputRef.current.join('');
+      pendingInputRef.current = [];
+      window.electronAPI.writePty(sessionId, bufferedInput);
     }
 
     // Subscribe to pty output
@@ -527,42 +551,43 @@ export default function TerminalView({
     // wait briefly for the shell prompt to settle then inject the tool's
     // continue command (claude --continue / codex resume --last / etc).
     // This brings back the AI's full conversation context for free.
-    if (autoRestoreSessions && sessionLastTool && toolCatalog?.tools) {
-      setTimeout(() => {
+    const lastTool = sessionLastToolRef.current;
+    if (!result?.reused && autoRestoreSessionsRef.current && lastTool && toolCatalogRef.current?.tools) {
+      restoreTimerRef.current = setTimeout(() => {
         let cmd = null;
         // Native tool path
-        if (toolCatalog.tools[sessionLastTool]) {
+        if (toolCatalogRef.current.tools[lastTool]) {
           cmd = buildLaunchCommand({
             kind: 'tool',
-            tool: toolCatalog.tools[sessionLastTool],
+            tool: toolCatalogRef.current.tools[lastTool],
             yoloMode: false,
             continueMode: true,
-            toolCatalog,
+            toolCatalog: toolCatalogRef.current,
           });
         }
-        // Provider path (GLM / MiniMax)
-        else if (toolCatalog.providers?.[sessionLastTool]) {
-          const provider = useSessionStore.getState().getEffectiveProvider(sessionLastTool);
+        // Provider path (GLM / MiniMax / Kimi)
+        else if (toolCatalogRef.current.providers?.[lastTool]) {
+          const provider = useSessionStore.getState().getEffectiveProvider(lastTool);
           if (provider?.config?.apiKey) {
             cmd = buildLaunchCommand({
               kind: 'provider',
               provider,
               yoloMode: false,
               continueMode: true,
-              toolCatalog,
+              toolCatalog: toolCatalogRef.current,
             });
           }
         }
         if (cmd) {
-          term.write(`\r\n\x1b[2m[自动恢复 ${sessionLastTool} 上次会话...]\x1b[0m\r\n`);
-          // Pass sessionLastTool as toolId so main process can disambiguate
-          // providers (GLM/MiniMax) from the underlying claude binary
-          const restoreLabel = TOOL_VISUALS[sessionLastTool]?.label || sessionLastTool;
-          window.electronAPI.launchTool(sessionId, cmd, sessionLastTool, restoreLabel);
+          term.write(`\r\n\x1b[2m[自动恢复 ${lastTool} 上次会话...]\x1b[0m\r\n`);
+          // Pass lastTool as toolId so main process can disambiguate
+          // providers (GLM/MiniMax/Kimi) from the underlying claude binary
+          const restoreLabel = TOOL_VISUALS[lastTool]?.label || lastTool;
+          window.electronAPI.launchTool(sessionId, cmd, lastTool, restoreLabel);
         }
       }, 1200);  // give the shell prompt time to render
     }
-  }, [sessionId, cwd, autoRestoreSessions, sessionLastTool, toolCatalog]);
+  }, [sessionId, cwd]);
 
   // ── Resize observer ────────────────────────────────────────────────────────
 
@@ -589,6 +614,12 @@ export default function TerminalView({
       // Unsubscribe IPC listeners first (independent of xterm internals)
       try { unsubDataRef.current?.(); } catch (_) {}
       try { unsubExitRef.current?.(); } catch (_) {}
+      if (restoreTimerRef.current) {
+        clearTimeout(restoreTimerRef.current);
+        restoreTimerRef.current = null;
+      }
+      ptyReadyRef.current = false;
+      pendingInputRef.current = [];
 
       // Dispose WebGL addon BEFORE the terminal — its dispose chain is fragile
       // and can throw "_isDisposed of undefined" if disposed via AddonManager
@@ -635,7 +666,7 @@ export default function TerminalView({
 
     const cmd = buildLaunchCommand({ kind: 'tool', tool, yoloMode, continueMode, toolCatalog });
     if (cmd) {
-      // Pass toolId so main process can disambiguate GLM/MiniMax/Claude later
+      // Pass toolId so main process can disambiguate GLM/MiniMax/Kimi/Claude later
       window.electronAPI.launchTool(sessionId, cmd, toolId, TOOL_VISUALS[toolId]?.label || tool.name);
       termRef.current?.focus();
     }
@@ -664,7 +695,7 @@ export default function TerminalView({
 
     const cmd = buildLaunchCommand({ kind: 'provider', provider, yoloMode, continueMode, toolCatalog });
     if (cmd) {
-      // Pass providerId so main process knows GLM/MiniMax even though the
+      // Pass providerId so main process knows GLM/MiniMax/Kimi even though the
       // process is actually `claude`
       window.electronAPI.launchTool(sessionId, cmd, providerId, TOOL_VISUALS[providerId]?.label || provider.name);
       termRef.current?.focus();
@@ -803,7 +834,7 @@ export default function TerminalView({
 
           <div style={styles.toolGroupDivider} />
 
-          {/* Provider-based (GLM / MiniMax) */}
+          {/* Provider-based (GLM / MiniMax / Kimi) */}
           {PROVIDER_ORDER.map((id) => {
             const provider = toolCatalog.providers?.[id];
             if (!provider) return null;

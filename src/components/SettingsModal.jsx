@@ -140,7 +140,7 @@ export default function SettingsModal() {
                 统一管理多个 AI 编程 CLI 工具的专业终端面板。
               </p>
               <p style={styles.aboutText}>
-                支持 Claude / Codex / Gemini / Qwen / OpenCode / GLM / MiniMax
+                支持 Claude / Codex / Gemini / Qwen / OpenCode / GLM / MiniMax / Kimi
                 等多种工具的快捷启动、进程监控、响应完成通知、Git 管理和文件浏览。
               </p>
               <div style={styles.aboutMeta}>
@@ -451,13 +451,14 @@ function AppearanceTab({ theme, setTheme, autoRestoreSessions, toggleAutoRestore
           id="light"
           label="浅色"
           active={theme === 'light'}
-          onClick={() => setTheme('light')}
+          onClick={() => {}}
           colors={['#f8fafc', '#ffffff', '#d97706']}
           wip
+          disabled
         />
       </div>
       <p style={styles.hintDim}>
-        浅色主题正在开发中，目前仅影响根背景层；完整支持需要后续把所有组件颜色迁移到 CSS 变量。
+        浅色主题尚未完成，当前已禁用选择；完整支持需要后续把所有组件颜色迁移到 CSS 变量。
       </p>
 
       {/* Section divider */}
@@ -493,15 +494,18 @@ function AppearanceTab({ theme, setTheme, autoRestoreSessions, toggleAutoRestore
   );
 }
 
-function ThemeCard({ id, label, active, onClick, colors, wip }) {
+function ThemeCard({ id, label, active, onClick, colors, wip, disabled }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         ...styles.themeCard,
         borderColor: active ? '#f59e0b' : '#1e1e1e',
         boxShadow: active ? '0 0 0 1px rgba(245, 158, 11, 0.3), 0 4px 16px rgba(245, 158, 11, 0.15)' : 'none',
         position: 'relative',
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >
       <div style={styles.themePreview}>

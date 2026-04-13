@@ -33,6 +33,7 @@ const GIT_STATUS_VISUAL = {
   added:     { letter: 'A', color: '#22c55e' },
   deleted:   { letter: 'D', color: '#ef4444' },
   renamed:   { letter: 'R', color: '#a855f7' },
+  conflicted:{ letter: '!', color: '#f97316' },
   untracked: { letter: 'U', color: '#06b6d4' },
 };
 

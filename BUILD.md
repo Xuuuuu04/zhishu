@@ -16,7 +16,7 @@
 npm install
 
 # 2. Rebuild node-pty against current Electron version
-npx electron-rebuild -f -w node-pty
+npm run rebuild-native
 
 # 3. 生成 React 生产构建 + 打包为 .dmg / .zip / .app
 npm run package

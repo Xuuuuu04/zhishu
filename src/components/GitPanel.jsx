@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSessionStore } from '../store/sessions';
 
 // ─── Status code → display config ────────────────────────────────────────────
 
@@ -7,13 +8,23 @@ const STATUS_META = {
   added:     { letter: 'A', color: '#22c55e', label: '新增' },
   deleted:   { letter: 'D', color: '#ef4444', label: '删除' },
   renamed:   { letter: 'R', color: '#a855f7', label: '重命名' },
+  conflicted:{ letter: '!', color: '#f97316', label: '冲突' },
   untracked: { letter: 'U', color: '#06b6d4', label: '未跟踪' },
   ignored:   { letter: 'I', color: '#555',    label: '忽略' },
 };
 
+function getParentDir(dirPath) {
+  if (!dirPath) return dirPath;
+  const normalized = dirPath.replace(/\/+$/, '');
+  const lastSlash = normalized.lastIndexOf('/');
+  if (lastSlash <= 0) return normalized || '/';
+  return normalized.slice(0, lastSlash);
+}
+
 // ─── GitPanel — slides in from the right side, narrower than file tree ──────
 
 export default function GitPanel({ open, cwd, sessionId, onClose }) {
+  const showPrompt = useSessionStore((s) => s.showPrompt);
   // mode: 'current' = focus on the active session's repo (single repo view)
   //       'scan'    = recursively scan cwd for ALL git repos and manage them
   const [mode, setMode] = useState('current');
@@ -46,7 +57,9 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
   const scanRepos = useCallback(async () => {
     if (!cwd) return;
     setScanning(true);
-    const result = await window.electronAPI.gitScanRepos(cwd);
+    const currentStatus = await window.electronAPI.gitStatus(cwd);
+    const scanRoot = currentStatus?.isRepo ? getParentDir(cwd) : cwd;
+    const result = await window.electronAPI.gitScanRepos(scanRoot);
     setScanResult(result);
     setScanning(false);
   }, [cwd]);
@@ -82,6 +95,17 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
   };
 
   const isRepo = status?.isRepo;
+  const handleCommit = async () => {
+    const msg = await showPrompt({
+      title: '提交信息',
+      defaultValue: '',
+      placeholder: '例如：fix: handle detached HEAD in git panel',
+      confirmLabel: '提交',
+    });
+    if (!msg) return;
+    const escaped = msg.replace(/'/g, "'\\''");
+    runInSession(`git commit -m '${escaped}'`);
+  };
 
   return (
     <div style={{
@@ -176,7 +200,7 @@ export default function GitPanel({ open, cwd, sessionId, onClose }) {
 
               <div style={styles.tabBody}>
                 {activeTab === 'changes' && (
-                  <ChangesTab files={status.files} runInSession={runInSession} />
+                  <ChangesTab files={status.files} runInSession={runInSession} onCommit={handleCommit} />
                 )}
                 {activeTab === 'branches' && (
                   <BranchesTab branches={branches} runInSession={runInSession} />
@@ -424,7 +448,7 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function ChangesTab({ files, runInSession }) {
+function ChangesTab({ files, runInSession, onCommit }) {
   if (files.length === 0) {
     return (
       <div style={styles.emptyTab}>
@@ -456,13 +480,7 @@ function ChangesTab({ files, runInSession }) {
         </button>
         <button
           style={styles.actionBtnFull}
-          onClick={() => {
-            const msg = prompt('提交信息:');
-            if (msg && msg.trim()) {
-              const escaped = msg.replace(/'/g, "'\\''");
-              runInSession(`git commit -m '${escaped}'`);
-            }
-          }}
+          onClick={onCommit}
         >
           提交
         </button>

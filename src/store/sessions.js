@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+const {
+  hasSessionId,
+  resolveProjects,
+  resolveTheme,
+  resolveActiveSessionId,
+  removeSessionFromProjects,
+  removeProjectFromProjects,
+  getFallbackActiveSessionId,
+} = require('./sessionState');
 
 // ─── Default config ──────────────────────────────────────────────────────────
 
@@ -159,20 +168,22 @@ export const useSessionStore = create((set, get) => ({
 
   init: async () => {
     try {
-      const [config, catalog] = await Promise.all([
-        window.electronAPI.loadConfig(),
-        window.electronAPI.getToolCatalog(),
-      ]);
+      const config = await window.electronAPI.loadConfig();
+      let catalog = { tools: {}, providers: {} };
+      try {
+        catalog = await window.electronAPI.getToolCatalog();
+      } catch (e) {
+        console.error('getToolCatalog failed:', e);
+      }
 
-      const projects = config.projects?.length ? config.projects : DEFAULT_CONFIG.projects;
-      const firstSession = projects[0]?.sessions?.[0];
-
-      const theme = config.theme || 'dark';
+      const projects = resolveProjects(config.projects, DEFAULT_CONFIG.projects);
+      const activeSessionId = resolveActiveSessionId(projects, config.activeSessionId);
+      const theme = resolveTheme(config.theme);
       document.documentElement.setAttribute('data-theme', theme);
 
       set({
         projects,
-        activeSessionId: firstSession?.id || null,
+        activeSessionId,
         yoloMode: config.yoloMode || false,
         notificationsEnabled: config.notificationsEnabled !== false,
         autoRestoreSessions: config.autoRestoreSessions !== false,  // default true
@@ -191,14 +202,31 @@ export const useSessionStore = create((set, get) => ({
       get().refreshToolStatus();
     } catch (e) {
       console.error('init failed:', e);
-      set({ projects: DEFAULT_CONFIG.projects, isLoading: false });
+      set({
+        projects: DEFAULT_CONFIG.projects,
+        activeSessionId: resolveActiveSessionId(DEFAULT_CONFIG.projects, null),
+        isLoading: false,
+      });
     }
   },
 
   persist: () => {
-    const { projects, yoloMode, notificationsEnabled, providerConfigs, theme, sidebarWidth, autoRestoreSessions } = get();
+    const {
+      projects,
+      activeSessionId,
+      yoloMode,
+      notificationsEnabled,
+      providerConfigs,
+      theme,
+      sidebarWidth,
+      autoRestoreSessions,
+    } = get();
     window.electronAPI.saveConfig({
-      projects, yoloMode, notificationsEnabled, providerConfigs,
+      projects,
+      activeSessionId: resolveActiveSessionId(projects, activeSessionId),
+      yoloMode,
+      notificationsEnabled,
+      providerConfigs,
       theme, sidebarWidth, autoRestoreSessions,
     });
   },
@@ -283,8 +311,9 @@ export const useSessionStore = create((set, get) => ({
 
   // ── Theme ─────────────────────────────────────────────────────────────
   setTheme: (theme) => {
-    set({ theme });
-    document.documentElement.setAttribute('data-theme', theme);
+    const nextTheme = resolveTheme(theme);
+    set({ theme: nextTheme });
+    document.documentElement.setAttribute('data-theme', nextTheme);
     get().persist();
   },
 
@@ -379,7 +408,7 @@ export const useSessionStore = create((set, get) => ({
   addProject: (name, path) => {
     const newSession = { id: uuidv4(), name: '主会话', createdAt: Date.now() };
     const project = { id: uuidv4(), name, path, sessions: [newSession] };
-    set((s) => ({ projects: [...s.projects, project] }));
+    set((s) => ({ projects: [...s.projects, project], activeSessionId: newSession.id }));
     get().persist();
     get().syncSessionNamesToMain();
     return project;
@@ -429,13 +458,20 @@ export const useSessionStore = create((set, get) => ({
       window.electronAPI.cleanupSession(s.id);
     });
 
-    set((s) => ({
-      projects: s.projects.filter((p) => p.id !== projectId),
-      activeSessionId:
-        project?.sessions.some((ss) => ss.id === s.activeSessionId)
-          ? null
-          : s.activeSessionId,
-    }));
+    set((s) => {
+      const nextProjects = removeProjectFromProjects(s.projects, projectId);
+      const removedIds = project?.sessions.map((session) => session.id) || [];
+      const removedSet = new Set(removedIds);
+      const nextStatus = Object.fromEntries(
+        Object.entries(s.sessionStatus).filter(([sessionId]) => !removedSet.has(sessionId))
+      );
+      return {
+        projects: nextProjects,
+        activeSessionId: getFallbackActiveSessionId(nextProjects, removedIds, s.activeSessionId),
+        sessionStatus: nextStatus,
+        toasts: s.toasts.filter((toast) => !toast.sessionId || !removedSet.has(toast.sessionId)),
+      };
+    });
     get().persist();
     get().syncSessionNamesToMain();
   },
@@ -472,22 +508,18 @@ export const useSessionStore = create((set, get) => ({
 
   removeSession: (projectId, sessionId) => {
     set((s) => {
-      const project = s.projects.find((p) => p.id === projectId);
-      const remaining = project?.sessions.filter((ss) => ss.id !== sessionId) || [];
-      const newActive = s.activeSessionId === sessionId
-        ? (remaining[remaining.length - 1]?.id || null)
-        : s.activeSessionId;
+      const nextProjects = removeSessionFromProjects(s.projects, projectId, sessionId);
+      const newActive = getFallbackActiveSessionId(nextProjects, [sessionId], s.activeSessionId);
 
       // Strip the sessionStatus entry for the removed session
       const newStatus = { ...s.sessionStatus };
       delete newStatus[sessionId];
 
       return {
-        projects: s.projects.map((p) =>
-          p.id === projectId ? { ...p, sessions: remaining } : p
-        ),
+        projects: nextProjects,
         activeSessionId: newActive,
         sessionStatus: newStatus,
+        toasts: s.toasts.filter((toast) => toast.sessionId !== sessionId),
       };
     });
     // Kill the pty process AND tell main to drop its monitoring state
@@ -512,7 +544,11 @@ export const useSessionStore = create((set, get) => ({
     get().syncSessionNamesToMain();
   },
 
-  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+  setActiveSession: (sessionId) => {
+    if (hasSessionId(get().projects, sessionId)) {
+      set({ activeSessionId: sessionId });
+    }
+  },
 
   // ── Keyboard-shortcut helpers ─────────────────────────────────────────
   // Cmd+T → add a session to the project that owns the currently-active session

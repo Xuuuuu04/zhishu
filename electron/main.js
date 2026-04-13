@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { execFile, execFileSync } = require('child_process');
+const { parseGitStatus } = require('./gitStatus');
 
 // node-pty is a native module — loaded lazily after app is ready
 let pty;
@@ -298,7 +299,7 @@ function snapshotProcesses() {
     execFile('ps', ['-axo', 'pid=,ppid=,command='],
       { maxBuffer: 8 * 1024 * 1024 },
       (err, stdout) => {
-        if (err) return resolve({ byPpid: new Map(), byPid: new Map() });
+        if (err) return resolve({ ok: false, byPpid: new Map(), byPid: new Map() });
 
         const byPpid = new Map();
         const byPid = new Map();
@@ -312,7 +313,7 @@ function snapshotProcesses() {
           if (!byPpid.has(proc.ppid)) byPpid.set(proc.ppid, []);
           byPpid.get(proc.ppid).push(proc);
         }
-        resolve({ byPpid, byPid });
+        resolve({ ok: true, byPpid, byPid });
       });
   });
 }
@@ -405,7 +406,8 @@ function computePhase({ hasUserInput, isOutputting }) {
 async function monitorTick() {
   if (ptyProcesses.size === 0) return;
 
-  const { byPpid } = await snapshotProcesses();
+  const { ok, byPpid } = await snapshotProcesses();
+  if (!ok) return;
   const now = Date.now();
 
   for (const [sessionId, ptyProc] of ptyProcesses) {
@@ -542,6 +544,50 @@ function broadcastStatus(sessionId, status) {
   if (win) {
     win.webContents.send(`session:status:${sessionId}`, status);
   }
+}
+
+function waitForShellQuiet(sessionId, minQuietMs = 180, maxWaitMs = 1500) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const initialLastOutputAt = ptyMeta.get(sessionId)?.lastOutputAt || startedAt;
+
+    function check() {
+      const meta = ptyMeta.get(sessionId);
+      if (!meta) return resolve();
+
+      const sawPostInterruptOutput = meta.lastOutputAt > initialLastOutputAt;
+      const quietForMs = Date.now() - meta.lastOutputAt;
+      const waitedForMs = Date.now() - startedAt;
+
+      if ((sawPostInterruptOutput && quietForMs >= minQuietMs) ||
+          (!sawPostInterruptOutput && waitedForMs >= minQuietMs) ||
+          waitedForMs >= maxWaitMs) {
+        return resolve();
+      }
+
+      setTimeout(check, 40);
+    }
+
+    setTimeout(check, 40);
+  });
+}
+
+async function interruptAndRunInShell(sessionId, command, { prelude = null, resetUserInput = false } = {}) {
+  const proc = ptyProcesses.get(sessionId);
+  if (!proc) return false;
+
+  const meta = ptyMeta.get(sessionId);
+  if (meta && resetUserInput) meta.hasUserInput = false;
+
+  proc.write('\x03');
+  await waitForShellQuiet(sessionId);
+
+  const currentProc = ptyProcesses.get(sessionId);
+  if (!currentProc) return false;
+
+  if (prelude) currentProc.write(`${prelude}\r`);
+  currentProc.write(`${command}\r`);
+  return true;
 }
 
 let monitorInterval = null;
@@ -835,64 +881,6 @@ function runGit(cwd, args, opts = {}) {
   });
 }
 
-/**
- * Parse `git status --porcelain=v1 -b` output into a structured object.
- *
- * Format:
- *   ## main...origin/main [ahead 2, behind 1]
- *    M src/foo.ts          (modified, not staged)
- *   M  src/bar.ts          (modified, staged)
- *   ?? new-file.txt        (untracked)
- *   A  src/new.ts          (added)
- *   D  src/old.ts          (deleted)
- */
-function parseGitStatus(stdout) {
-  const lines = stdout.split('\n').filter(Boolean);
-  const result = {
-    branch: null,
-    upstream: null,
-    ahead: 0,
-    behind: 0,
-    files: [],
-  };
-
-  for (const line of lines) {
-    if (line.startsWith('## ')) {
-      // Branch header line
-      const header = line.slice(3);
-      const branchMatch = header.match(/^([^.\s]+)(?:\.\.\.([^\s]+))?(?:\s+\[([^\]]+)\])?/);
-      if (branchMatch) {
-        result.branch = branchMatch[1];
-        result.upstream = branchMatch[2] || null;
-        const counts = branchMatch[3] || '';
-        const ahead = counts.match(/ahead (\d+)/);
-        const behind = counts.match(/behind (\d+)/);
-        if (ahead) result.ahead = parseInt(ahead[1], 10);
-        if (behind) result.behind = parseInt(behind[1], 10);
-      }
-    } else {
-      // File status line — first 2 chars are XY status codes
-      const x = line[0];
-      const y = line[1];
-      const filePath = line.slice(3);
-
-      let status = 'modified';
-      let stagedStatus = null;
-      if (x === '?' && y === '?') status = 'untracked';
-      else if (x === 'A' || y === 'A') status = 'added';
-      else if (x === 'D' || y === 'D') status = 'deleted';
-      else if (x === 'R' || y === 'R') status = 'renamed';
-      else if (x === '!' && y === '!') status = 'ignored';
-
-      // staged if X (the first column) is non-space and non-?
-      if (x !== ' ' && x !== '?') stagedStatus = x;
-
-      result.files.push({ path: filePath, status, x, y, staged: !!stagedStatus });
-    }
-  }
-  return result;
-}
-
 ipcMain.handle('git:status', async (_, cwd) => {
   if (!cwd) return { error: 'No cwd' };
   const r = await runGit(cwd, ['status', '--porcelain=v1', '-b']);
@@ -1027,13 +1015,7 @@ ipcMain.handle('git:scanRepos', async (_, rootDir) => {
 // Run a git command inside a session's pty so the user can see the output
 // and interact (e.g. enter credentials for push).
 ipcMain.on('git:runInSession', (_, { sessionId, command }) => {
-  const proc = ptyProcesses.get(sessionId);
-  if (!proc) return;
-  // Reset hasUserInput so the git output isn't classified as "running"
-  const meta = ptyMeta.get(sessionId);
-  if (meta) meta.hasUserInput = false;
-  proc.write('\x03');
-  setTimeout(() => proc.write(command + '\r'), 100);
+  interruptAndRunInShell(sessionId, command, { resetUserInput: true }).catch(() => {});
 });
 
 // Check if a file exists at the given path
@@ -1337,22 +1319,12 @@ ipcMain.handle('tools:checkAll', async () => {
 ipcMain.on('tools:installInSession', (_, { sessionId, toolId, action }) => {
   const tool = TOOL_CATALOG[toolId];
   if (!tool) return;
-  const proc = ptyProcesses.get(sessionId);
-  if (!proc) return;
-
   const cmd = action === 'upgrade' ? tool.upgradeCmd : tool.installCmd;
   if (!cmd) return;
-
-  // Reset the user-input flag so the install output is NOT classified as "running"
-  const meta = ptyMeta.get(sessionId);
-  if (meta) meta.hasUserInput = false;
-
-  // Interrupt anything currently foregrounded, then run the install
-  proc.write('\x03');
-  setTimeout(() => {
-    proc.write(`echo "📦 正在 ${action === 'upgrade' ? '升级' : '安装'} ${tool.name}..."\r`);
-    setTimeout(() => proc.write(cmd + '\r'), 80);
-  }, 120);
+  interruptAndRunInShell(sessionId, cmd, {
+    resetUserInput: true,
+    prelude: `echo "📦 正在 ${action === 'upgrade' ? '升级' : '安装'} ${tool.name}..."`,
+  }).catch(() => {});
 });
 
 // ─── IPC: PTY ────────────────────────────────────────────────────────────────
@@ -1416,6 +1388,19 @@ ipcMain.handle('pty:create', (event, { sessionId, cwd, cols, rows }) => {
   // existing ptys instead of killing them — see the top of this handler.)
 
   ptyProcess.onExit(({ exitCode }) => {
+    const prev = sessionStatus.get(sessionId);
+    if (prev?.tool) {
+      const next = {
+        tool: null,
+        phase: 'not_started',
+        startedAt: null,
+        runningStartedAt: null,
+        lastRanTool: prev.tool,
+        lastDuration: prev.startedAt ? Date.now() - prev.startedAt : prev.lastDuration,
+      };
+      broadcastStatus(sessionId, next);
+    }
+
     ptyProcesses.delete(sessionId);
     ptyMeta.delete(sessionId);
     sessionStatus.delete(sessionId);
@@ -1504,19 +1489,11 @@ ipcMain.on('session:cleanup', (_, sessionId) => {
 // `toolId` and `toolLabel` let us distinguish GLM/MiniMax from Claude even
 // though they all spawn the same `claude` binary — see sessionLaunchedTool.
 ipcMain.on('pty:launch', (_, { sessionId, command, toolId, toolLabel }) => {
-  const proc = ptyProcesses.get(sessionId);
-  if (!proc) return;
-
-  const meta = ptyMeta.get(sessionId);
-  if (meta) meta.hasUserInput = false;
-
   // Record the declared tool intent so monitorTick can distinguish providers
   // (GLM/MiniMax) from the underlying claude binary they share.
   if (toolId) {
     sessionLaunchedTool.set(sessionId, { id: toolId, label: toolLabel || toolId });
   }
 
-  // Send Ctrl+C first to interrupt any current foreground process, then the command.
-  proc.write('\x03');
-  setTimeout(() => proc.write(command + '\r'), 100);
+  interruptAndRunInShell(sessionId, command, { resetUserInput: true }).catch(() => {});
 });

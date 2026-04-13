@@ -6,6 +6,10 @@ const TOOL_COLORS = {
   codex: '#16a34a',
   gemini: '#3b82f6',
   qwen: '#06b6d4',
+  opencode: '#f97316',
+  glm: '#a855f7',
+  minimax: '#ec4899',
+  kimi: '#0ea5e9',
 };
 
 const AUTO_DISMISS_MS = 6000;
