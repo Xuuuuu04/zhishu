@@ -9,11 +9,12 @@ const {
 
 // ─── Unit tests for pure-logic helpers (no Keychain access needed) ──────────
 
-test('ALLOWED_ACCOUNTS contains exactly glm, minimax, kimi', () => {
+test('ALLOWED_ACCOUNTS contains exactly glm, minimax, kimi, qwencp', () => {
   assert.ok(ALLOWED_ACCOUNTS.has('glm'));
   assert.ok(ALLOWED_ACCOUNTS.has('minimax'));
   assert.ok(ALLOWED_ACCOUNTS.has('kimi'));
-  assert.equal(ALLOWED_ACCOUNTS.size, 3);
+  assert.ok(ALLOWED_ACCOUNTS.has('qwencp'));
+  assert.equal(ALLOWED_ACCOUNTS.size, 4);
 });
 
 test('migrateKeysFromConfig passes through non-managed providers unchanged', async () => {

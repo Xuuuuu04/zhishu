@@ -111,6 +111,18 @@ const PROVIDER_CATALOG = {
       haikuModel: 'kimi-for-coding',
     },
   },
+  qwencp: {
+    id: 'qwencp',
+    name: 'Qwen CodingPlan',
+    baseTool: 'claude',
+    configurable: true,
+    defaults: {
+      baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+      opusModel: 'qwen3.5-plus',
+      sonnetModel: 'qwen3.5-plus',
+      haikuModel: 'qwen3.5-plus',
+    },
+  },
 };
 
 function checkToolInstalled(tool) {

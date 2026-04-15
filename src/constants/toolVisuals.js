@@ -21,6 +21,7 @@ const TOOL_VISUALS = {
   glm:      { label: 'GLM',      color: '#a855f7', glow: 'rgba(168, 85, 247, 0.35)' },
   minimax:  { label: 'MiniMax',  color: '#ec4899', glow: 'rgba(236, 72, 153, 0.35)' },
   kimi:     { label: 'Kimi',     color: '#0ea5e9', glow: 'rgba(14, 165, 233, 0.35)' },
+  qwencp:   { label: 'QwenCP',   color: '#0d9488', glow: 'rgba(13, 148, 136, 0.35)' },
 };
 
 // ─── Derived convenience maps ───────────────────────────────────────────────
@@ -41,7 +42,7 @@ const PHASE_REVIEW  = '#22c55e';  // awaiting_review
 // ─── Toolbar ordering ───────────────────────────────────────────────────────
 
 const TOOL_ORDER     = ['claude', 'codex', 'gemini', 'qwen', 'opencode'];
-const PROVIDER_ORDER = ['glm', 'minimax', 'kimi'];
+const PROVIDER_ORDER = ['glm', 'minimax', 'kimi', 'qwencp'];
 
 // ─── Exports ────────────────────────────────────────────────────────────────
 

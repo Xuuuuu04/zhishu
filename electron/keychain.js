@@ -11,7 +11,7 @@ const SERVICE_NAME = 'ai-terminal-manager';
 
 // Provider IDs that are allowed to store keys in Keychain.
 // Must match the keys in PROVIDER_CATALOG.
-const ALLOWED_ACCOUNTS = new Set(['glm', 'minimax', 'kimi']);
+const ALLOWED_ACCOUNTS = new Set(['glm', 'minimax', 'kimi', 'qwencp']);
 
 /**
  * Validate that an account name is a known provider ID.

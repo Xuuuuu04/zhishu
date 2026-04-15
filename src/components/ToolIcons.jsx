@@ -105,100 +105,33 @@ export const KimiIcon = ({ size = 14, color = 'currentColor' }) => (
   </svg>
 );
 
-// ─── App brand logo (智枢 / ZhiShu) ──────────────────────────────────────────
+// ─── App brand logo (Prism v4 — golden hammer) ────────────────────────────────
 //
-// Design rationale:
-// • Outer "shield" rotated square (45°) — solidity, framing, stability
-// • Inner curved "Z" stroke — first letter of 智 (zhì) AND ZhiShu romanization
-// • Central illuminated core dot — the "hub" being radiated to
-// • Three orbital arcs — three providers/agents revolving around the hub
-// • Multi-stop amber→orange→deep gradient gives depth and warmth
-// • Inner highlight + outer glow for premium feel
-//
-// The result reads as a single unified mark rather than a sum of geometric parts.
-export const AppLogo = ({ size = 28 }) => {
-  const id = 'appLogo';  // unique gradient IDs would be needed if mounted twice
-  return (
-    <svg width={size} height={size} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        {/* Outer shield gradient — warm gold to deep amber */}
-        <linearGradient id={`${id}-shell`} x1="20%" y1="0%" x2="80%" y2="100%">
-          <stop offset="0%"   stopColor="#fde68a" />
-          <stop offset="35%"  stopColor="#fbbf24" />
-          <stop offset="70%"  stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#b45309" />
-        </linearGradient>
-        {/* Z stroke — slightly more saturated for emphasis */}
-        <linearGradient id={`${id}-z`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor="#fef3c7" />
-          <stop offset="40%"  stopColor="#fbbf24" />
-          <stop offset="100%" stopColor="#d97706" />
-        </linearGradient>
-        {/* Core glow */}
-        <radialGradient id={`${id}-core`} cx="42%" cy="38%" r="65%">
-          <stop offset="0%"   stopColor="#ffffff" />
-          <stop offset="35%"  stopColor="#fde68a" />
-          <stop offset="100%" stopColor="#b45309" />
-        </radialGradient>
-        {/* Outer atmospheric glow */}
-        <radialGradient id={`${id}-glow`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#fbbf24" stopOpacity="0.42" />
-          <stop offset="55%"  stopColor="#f59e0b" stopOpacity="0.12" />
-          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-        </radialGradient>
-      </defs>
+// Gilded amber background (diagonal gradient) + white hammer mark with
+// slight -12° tilt. Simplified at 48px viewBox: no grip ring / highlights
+// (they vanish at 28px render and add visual noise).
+export const AppLogo = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="appLogoBg" x1="15%" y1="0%" x2="90%" y2="100%">
+        <stop offset="0%"   stopColor="#FDE68A"/>
+        <stop offset="22%"  stopColor="#FBBF24"/>
+        <stop offset="55%"  stopColor="#D97706"/>
+        <stop offset="85%"  stopColor="#78350F"/>
+        <stop offset="100%" stopColor="#431407"/>
+      </linearGradient>
+    </defs>
 
-      {/* Atmospheric outer glow */}
-      <circle cx="24" cy="24" r="23" fill={`url(#${id}-glow)`} />
+    {/* Rounded-square tile (22% corner radius) */}
+    <rect width="48" height="48" rx="11" fill="url(#appLogoBg)"/>
 
-      {/* Outer rotated shield (45°) — stroke only, slightly inset */}
-      <g transform="rotate(45 24 24)">
-        <rect
-          x="6.5" y="6.5" width="35" height="35" rx="4.5"
-          fill="none"
-          stroke={`url(#${id}-shell)`}
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        {/* Inner shield line for double-stroke depth */}
-        <rect
-          x="9" y="9" width="30" height="30" rx="3"
-          fill="none"
-          stroke={`url(#${id}-shell)`}
-          strokeWidth="0.8"
-          strokeLinejoin="round"
-          opacity="0.45"
-        />
-      </g>
-
-      {/* Three orbital arcs (rotated 60° apart) suggesting agents in orbit */}
-      <g fill="none" stroke={`url(#${id}-shell)`} strokeWidth="0.9" opacity="0.7">
-        <ellipse cx="24" cy="24" rx="14" ry="6" transform="rotate(20 24 24)" />
-        <ellipse cx="24" cy="24" rx="14" ry="6" transform="rotate(80 24 24)" />
-        <ellipse cx="24" cy="24" rx="14" ry="6" transform="rotate(140 24 24)" />
-      </g>
-
-      {/* Stylized "Z" — three strokes forming a centered Z with curved corners */}
-      <g
-        fill="none"
-        stroke={`url(#${id}-z)`}
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M 16 16 L 30 16 Q 32 16 30.5 17.8 L 17.5 30.2 Q 16 32 18 32 L 32 32" />
-      </g>
-
-      {/* Central illuminated core */}
-      <circle cx="24" cy="24" r="3.2" fill={`url(#${id}-core)`} />
-      <circle cx="22.6" cy="22.6" r="1" fill="#ffffff" opacity="0.85" />
-
-      {/* Tiny orbit nodes for life */}
-      <circle cx="38" cy="24" r="0.9" fill={`url(#${id}-shell)`} />
-      <circle cx="10" cy="24" r="0.9" fill={`url(#${id}-shell)`} />
-    </svg>
-  );
-};
+    {/* Hammer: centered at (24, 26), tilted -12° */}
+    <g transform="translate(24, 26) rotate(-12)" fill="#FFFFFF">
+      <rect x="-1.7" y="-4.5" width="3.4" height="26" rx="1.6"/>
+      <rect x="-10" y="-10.5" width="20" height="6.2" rx="1.6"/>
+    </g>
+  </svg>
+);
 
 // ─── UI chrome icons (toolbar buttons, not AI tools) ───────────────────────
 
@@ -300,6 +233,7 @@ export const TOOL_ICONS = {
   glm:      GlmIcon,
   minimax:  MinimaxIcon,
   kimi:     KimiIcon,
+  qwencp:   QwenIcon,   // Qwen CodingPlan — 复用 Qwen 图标，颜色由 toolVisuals 区分
 };
 
 export function ToolIcon({ id, size = 14, color = 'currentColor' }) {

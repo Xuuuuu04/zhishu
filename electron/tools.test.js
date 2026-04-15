@@ -196,12 +196,13 @@ test('all tool commands are unique', () => {
 
 // ─── PROVIDER_CATALOG structure and completeness ────────────────────────────
 
-test('PROVIDER_CATALOG has exactly 3 providers', () => {
+test('PROVIDER_CATALOG has exactly 4 providers', () => {
   const keys = Object.keys(PROVIDER_CATALOG);
-  assert.equal(keys.length, 3);
+  assert.equal(keys.length, 4);
   assert.ok(keys.includes('glm'));
   assert.ok(keys.includes('minimax'));
   assert.ok(keys.includes('kimi'));
+  assert.ok(keys.includes('qwencp'));
 });
 
 test('every provider has all required fields', () => {
@@ -291,9 +292,9 @@ test('all provider IDs are unique', () => {
 });
 
 test('provider IDs match keychain ALLOWED_ACCOUNTS', () => {
-  // From keychain.js: ALLOWED_ACCOUNTS = new Set(['glm', 'minimax', 'kimi'])
+  // From keychain.js: ALLOWED_ACCOUNTS = new Set(['glm', 'minimax', 'kimi', 'qwencp'])
   const providerIds = Object.keys(PROVIDER_CATALOG);
-  const allowedAccounts = new Set(['glm', 'minimax', 'kimi']);
+  const allowedAccounts = new Set(['glm', 'minimax', 'kimi', 'qwencp']);
   for (const id of providerIds) {
     assert.ok(allowedAccounts.has(id),
       `Provider '${id}' should be in ALLOWED_ACCOUNTS`);
