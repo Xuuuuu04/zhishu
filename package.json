@@ -55,8 +55,8 @@
   },
   "build": {
     "extends": null,
-    "appId": "com.prism.app",
-    "productName": "Prism",
+    "appId": "com.zhishu.app",
+    "productName": "智枢",
     "copyright": "Copyright © 2026 Xuuuuu04",
     "asar": true,
     "directories": {
@@ -99,7 +99,7 @@
       "darkModeSupport": true
     },
     "dmg": {
-      "title": "Prism ${version}",
+      "title": "智枢 ${version}",
       "icon": "build-assets/icon.icns",
       "contents": [
         {

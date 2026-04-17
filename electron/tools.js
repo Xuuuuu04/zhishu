@@ -127,7 +127,10 @@ const PROVIDER_CATALOG = {
 
 function checkToolInstalled(tool) {
   return new Promise((resolve) => {
-    execFile('which', [tool.command],
+    // Use a login shell so that user PATH (nvm/fnm/etc.) is loaded.
+    // `command -v` is more portable than `which` and returns the path on stdout.
+    const shell = process.env.SHELL || '/bin/zsh';
+    execFile(shell, ['-i', '-l', '-c', `command -v ${tool.command}`],
       { timeout: 5000 },
       (whichErr) => {
         if (whichErr) return resolve({ id: tool.id, installed: false, version: null });

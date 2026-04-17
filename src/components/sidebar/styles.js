@@ -370,8 +370,8 @@ const styles = {
   // Running-status pulsing dot shown on the right side of a session row
   // when an AI tool is active in that session.
   runningPulse: {
-    width: 6,
-    height: 6,
+    width: 8,
+    height: 8,
     borderRadius: '50%',
     animation: 'pulse 1.8s ease-in-out infinite',
     flexShrink: 0,

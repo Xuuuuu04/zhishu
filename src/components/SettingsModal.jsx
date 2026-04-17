@@ -8,7 +8,8 @@ import ProviderCard from './settings/ProviderCard';
 import CustomProviderCard from './settings/CustomProviderCard';
 import AgentConfigTab from './settings/AgentConfigTab';
 import AppearanceTab from './settings/AppearanceTab';
-import { version } from '../../package.json';
+import pkg from '../../package.json';
+const version = pkg.version;
 
 /**
  * Modal overlay for configuring providers + viewing tool installation status.

@@ -14,6 +14,7 @@ function ProjectSection({ project, activeSessionId, sessionStatus, onContextMenu
     addSession, removeSession, renameSession, removeProject, renameProject,
     setActiveSession, updateProjectPath,
     now, todos, setTodoFocusProject,
+    customProviders,
   } = useSessionStore();
 
   const handlePickDir = async (e) => {
@@ -138,6 +139,7 @@ function ProjectSection({ project, activeSessionId, sessionStatus, onContextMenu
           onRename={(name) => renameSession(project.id, session.id, name)}
           onRemove={() => removeSession(project.id, session.id)}
           now={now}
+          customProviders={customProviders}
         />
       ))}
     </div>

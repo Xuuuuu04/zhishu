@@ -81,6 +81,7 @@ function ToastItem({ toast, onDismiss, onNavigate }) {
   }
 
   // ── Completion variant (AI response done) ──────────────────────────
+  const isBatch = (toast.batchCount || 1) > 1;
   const durationText = formatDuration(toast.duration);
 
   return (
@@ -89,8 +90,8 @@ function ToastItem({ toast, onDismiss, onNavigate }) {
       <div style={styles.content}>
         <div style={styles.header}>
           <span style={{ ...styles.toolDot, background: color, boxShadow: `0 0 8px ${color}` }} />
-          <span style={{ ...styles.toolName, color }}>{toast.toolLabel}</span>
-          <span style={styles.statusText}>响应完成</span>
+          <span style={{ ...styles.toolName, color }}>{isBatch ? '多会话' : toast.toolLabel}</span>
+          <span style={styles.statusText}>{isBatch ? `${toast.batchCount} 个会话已完成响应` : '响应完成'}</span>
           <button
             style={styles.closeBtn}
             onClick={(e) => { e.stopPropagation(); onDismiss(toast.id); }}
@@ -101,7 +102,7 @@ function ToastItem({ toast, onDismiss, onNavigate }) {
           <span style={styles.sessionName}>{toast.sessionName}</span>
         </div>
         <div style={styles.footer}>
-          <span style={styles.duration}>耗时 {durationText}</span>
+          <span style={styles.duration}>{isBatch ? '批量完成' : `耗时 ${durationText}`}</span>
           <span style={{ ...styles.cta, color }}>前往查看 →</span>
         </div>
       </div>

@@ -112,8 +112,12 @@ async function saveConfigAsync(data) {
       toWrite.customProviders = await extractAndStoreKeys(toWrite.customProviders);
     }
 
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(toWrite, null, 2), 'utf-8');
-    try { fs.chmodSync(CONFIG_PATH, 0o600); } catch (_) {}
+    // Atomic write: write to temp file then rename — prevents partial writes
+    // on forced kill / crash (rename is atomic on POSIX).
+    const tmpPath = CONFIG_PATH + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(toWrite, null, 2), 'utf-8');
+    try { fs.chmodSync(tmpPath, 0o600); } catch (_) {}
+    fs.renameSync(tmpPath, CONFIG_PATH);
 
     cachedConfig = JSON.parse(JSON.stringify(data));
   } catch (e) {

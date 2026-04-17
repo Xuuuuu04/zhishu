@@ -317,6 +317,13 @@ function initPtyIPC() {
     const pending = notifyTimers.get(sessionId);
     if (pending) { clearTimeout(pending); notifyTimers.delete(sessionId); }
   });
+
+  // Mark a session as "viewed" by the user — resets hasUserInput so that
+  // the next monitorTick transitions awaiting_review -> idle_no_instruction.
+  ipcMain.on('session:markViewed', (_e, { sessionId }) => {
+    const meta = ptyMeta.get(sessionId);
+    if (meta) meta.hasUserInput = false;
+  });
 }
 
 module.exports = {

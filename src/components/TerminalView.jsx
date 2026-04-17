@@ -18,6 +18,7 @@ import {
   PHASE_REVIEW,
   getVisualForTool,
 } from '../constants/toolVisuals';
+// TOOL_VISUALS is still used directly by handleLaunchTool below.
 import { formatDuration } from '../utils/format';
 import ToolSelector from './ToolSelector';
 
@@ -34,8 +35,6 @@ import ToolSelector from './ToolSelector';
 
 // Visual metadata (TOOL_VISUALS) and helper functions (getVisualForTool, hexToGlow)
 // are defined in src/constants/toolVisuals.js — single source of truth.
-
-const TOOL_INFO_BY_ID = TOOL_VISUALS;
 
 /**
  * Build the launch command string for a tool or provider.
@@ -238,6 +237,7 @@ export default function TerminalView({
   const unsubExitRef = useRef(null);
   const initializedRef = useRef(false);
   const restoreTimerRef = useRef(null);
+  const restoreRetryRef = useRef(null);
   const ptyReadyRef = useRef(false);
   const pendingInputRef = useRef([]);
   const toolCatalogRef = useRef({ tools: {}, providers: {} });
@@ -459,13 +459,16 @@ export default function TerminalView({
     // wait briefly for the shell prompt to settle then inject the tool's
     // continue command (claude --continue / codex resume --last / etc).
     // This brings back the AI's full conversation context for free.
+    //
+    // Retry mechanism: if the restore command is sent but 5s later the
+    // monitor still hasn't detected an AI process (sessionStatus phase
+    // is still not_started), send the command again. Max 2 attempts total.
     const lastTool = sessionLastToolRef.current;
     if (!result?.reused && autoRestoreSessionsRef.current && lastTool && toolCatalogRef.current?.tools) {
-      restoreTimerRef.current = setTimeout(() => {
-        let cmd = null;
+      const buildRestoreCmd = () => {
         // Native tool path
         if (toolCatalogRef.current.tools[lastTool]) {
-          cmd = buildLaunchCommand({
+          return buildLaunchCommand({
             kind: 'tool',
             tool: toolCatalogRef.current.tools[lastTool],
             yoloMode: false,
@@ -474,10 +477,10 @@ export default function TerminalView({
           });
         }
         // Provider path (GLM / MiniMax / Kimi)
-        else if (toolCatalogRef.current.providers?.[lastTool] || lastTool.startsWith('custom-')) {
+        if (toolCatalogRef.current.providers?.[lastTool] || lastTool.startsWith('custom-')) {
           const provider = useSessionStore.getState().getEffectiveProvider(lastTool);
           if (provider?.config?.apiKey) {
-            cmd = buildLaunchCommand({
+            return buildLaunchCommand({
               kind: 'provider',
               provider,
               yoloMode: false,
@@ -486,15 +489,31 @@ export default function TerminalView({
             });
           }
         }
-        if (cmd) {
-          term.write(`\r\n\x1b[2m[自动恢复 ${lastTool} 上次会话...]\x1b[0m\r\n`);
-          // Pass lastTool as toolId so main process can disambiguate
-          // providers (GLM/MiniMax/Kimi) from the underlying claude binary
-          const customProvs = useSessionStore.getState().customProviders;
-          const restoreLabel = getVisualForTool(lastTool, customProvs).label;
-          window.electronAPI.launchTool(sessionId, cmd, lastTool, restoreLabel);
+        return null;
+      };
+
+      const sendRestore = (attempt) => {
+        const cmd = buildRestoreCmd();
+        if (!cmd) return;
+        const suffix = attempt > 1 ? ` (重试 #${attempt})` : '';
+        term.write(`\r\n\x1b[2m[自动恢复 ${lastTool} 上次会话...${suffix}]\x1b[0m\r\n`);
+        const customProvs = useSessionStore.getState().customProviders;
+        const restoreLabel = getVisualForTool(lastTool, customProvs).label;
+        window.electronAPI.launchTool(sessionId, cmd, lastTool, restoreLabel);
+
+        // Schedule a retry check: if after 5s the monitor hasn't detected
+        // an AI process for this session, resend the restore command.
+        if (attempt < 2) {
+          restoreRetryRef.current = setTimeout(() => {
+            const status = useSessionStore.getState().sessionStatus[sessionId];
+            if (!status?.tool || status.phase === 'not_started') {
+              sendRestore(attempt + 1);
+            }
+          }, 5000);
         }
-      }, 1200);  // give the shell prompt time to render
+      };
+
+      restoreTimerRef.current = setTimeout(() => sendRestore(1), 1200);
     }
   }, [sessionId, cwd]);
 
@@ -534,6 +553,10 @@ export default function TerminalView({
       if (restoreTimerRef.current) {
         clearTimeout(restoreTimerRef.current);
         restoreTimerRef.current = null;
+      }
+      if (restoreRetryRef.current) {
+        clearTimeout(restoreRetryRef.current);
+        restoreRetryRef.current = null;
       }
       ptyReadyRef.current = false;
       pendingInputRef.current = [];
@@ -628,7 +651,7 @@ export default function TerminalView({
   const sessionElapsed = formatDuration(sessionElapsedMs);
 
   const runningTool = sessionStatus?.tool;
-  const runningInfo = runningTool ? TOOL_INFO_BY_ID[runningTool] : null;
+  const runningInfo = runningTool ? getVisualForTool(runningTool, customProviders) : null;
   const runningDuration = runningTool && sessionStatus?.startedAt
     ? formatDuration(now - sessionStatus.startedAt)
     : null;
@@ -636,7 +659,7 @@ export default function TerminalView({
   const phase = sessionStatus?.phase;
 
   const lastRanTool = sessionStatus?.lastRanTool;
-  const lastRanInfo = lastRanTool ? TOOL_INFO_BY_ID[lastRanTool] : null;
+  const lastRanInfo = lastRanTool ? getVisualForTool(lastRanTool, customProviders) : null;
   const lastRanDuration = sessionStatus?.lastDuration
     ? formatDuration(sessionStatus.lastDuration)
     : null;

@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PencilIcon } from '../ToolIcons';
 import { IconTerminal, IconTrash } from './icons';
-import { getPhaseIndicator, fmtDuration, TOOL_COLORS, TOOL_LABELS } from './helpers';
+import { getPhaseIndicator, fmtDuration } from './helpers';
+import { getVisualForTool } from '../../constants/toolVisuals';
 import styles from './styles';
 
 // ─── Session row ──────────────────────────────────────────────────────────────
 
-const SessionRow = React.memo(function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove, status, now }) {
+const SessionRow = React.memo(function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove, status, now, customProviders }) {
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
 
@@ -56,26 +57,28 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
     setDraft(session.name);
   };
 
-  const indicator = getPhaseIndicator(status);
+  const indicator = getPhaseIndicator(status, customProviders);
 
   // Build the sub-line content (running tool + elapsed time, OR last-ran summary)
   let subLine = null;
   if (status?.tool) {
-    const toolLabel = TOOL_LABELS[status.tool] || status.tool;
+    const visual = getVisualForTool(status.tool, customProviders);
+    const toolLabel = visual.label;
     const elapsed = status.startedAt ? fmtDuration(now - status.startedAt) : '';
     const phaseTag = status.phase === 'awaiting_review' ? '待审' :
                      status.phase === 'running' ? '运行中' :
                      status.phase === 'idle_no_instruction' ? '未指令' : '';
     subLine = (
       <div style={styles.sessionSubLine}>
-        <span style={{ color: TOOL_COLORS[status.tool] || '#888' }}>{toolLabel}</span>
+        <span style={{ color: visual.color }}>{toolLabel}</span>
         {phaseTag && <span style={styles.subLineDim}>{'· '}{phaseTag}</span>}
         {elapsed && <span style={styles.subLineDim}>{'· '}{elapsed}</span>}
       </div>
     );
   } else if (status?.lastRanTool) {
     // No active tool but we know what ran last -- show as muted history
-    const label = TOOL_LABELS[status.lastRanTool] || status.lastRanTool;
+    const lastVisual = getVisualForTool(status.lastRanTool, customProviders);
+    const label = lastVisual.label;
     const dur = status.lastDuration ? fmtDuration(status.lastDuration) : '';
     subLine = (
       <div style={styles.sessionSubLine}>
@@ -136,17 +139,23 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
             title="双击重命名"
           >
             {session.name}
+            {status?.phase === 'awaiting_review' && (
+              <span style={{ fontSize: 10, color: '#22c55e', marginLeft: 6, fontWeight: 500 }}>待审</span>
+            )}
+            {status?.phase === 'running' && (
+              <span style={{ fontSize: 10, color: indicator?.color || '#f59e0b', marginLeft: 6, fontWeight: 500 }}>运行中</span>
+            )}
           </span>
         )}
 
-        {/* Phase indicator -- only when NOT hovered, so hover swaps it for actions */}
-        {indicator && !editing && !hovered && (
+        {/* Phase indicator dot -- always visible when active, coexists with hover actions */}
+        {indicator && !editing && (
           <span
             title={indicator.title}
             style={{
               ...styles.runningPulse,
               background: indicator.color,
-              boxShadow: `0 0 6px ${indicator.color}, 0 0 2px ${indicator.color}`,
+              boxShadow: `0 0 10px ${indicator.color}, 0 0 3px ${indicator.color}`,
               animation: indicator.animation,
             }}
           />

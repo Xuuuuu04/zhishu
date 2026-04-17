@@ -42,6 +42,15 @@ export default function App() {
 
   useEffect(() => { init(); }, [init]);
 
+  // When switching to a session in awaiting_review, mark it as viewed
+  // so the next monitorTick transitions it back to idle_no_instruction.
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (sessionStatus[activeSessionId]?.phase === 'awaiting_review') {
+      window.electronAPI?.markSessionViewed(activeSessionId);
+    }
+  }, [activeSessionId, sessionStatus]);
+
   // ── Global keyboard shortcuts ─────────────────────────────────────────
   // Cmd+T → new session, Cmd+W → close session, Cmd+1..9 → jump to Nth
   // Cmd+\ → toggle split, Cmd+Shift+\ → swap split sessions
@@ -145,6 +154,12 @@ export default function App() {
   // Global subscription: AI response-complete events → toast + sound
   // This is the key "awareness" mechanism — fires every time an AI finishes
   // generating a response (busy → idle transition), NOT just on process exit.
+  //
+  // mergeKey 'completion-batch' ensures that when N sessions finish around the
+  // same time (each has its own 3.5s debounce timer), they are merged into a
+  // single toast instead of stacking N separate toasts.  The first completion
+  // creates a normal toast; subsequent completions within the toast's lifetime
+  // update its text to a summary like "SessionName +2 个会话".
   useEffect(() => {
     const unsub = window.electronAPI.onResponseComplete((payload) => {
       addToast({
@@ -153,6 +168,7 @@ export default function App() {
         toolLabel: payload.toolLabel,
         sessionName: payload.sessionName,
         duration: payload.duration,
+        mergeKey: 'completion-batch',
       });
 
       // Play the in-app chime whenever notifications are enabled

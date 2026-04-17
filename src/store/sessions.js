@@ -549,8 +549,11 @@ export const useSessionStore = create((set, get) => ({
               : sess
           ),
         }));
-        // Schedule a persist (debounced — fire-and-forget)
-        setTimeout(() => get().persist(), 0);
+        // Persist immediately — config.js uses synchronous atomic write
+        // so this won't block the event loop. Eliminates the risk of
+        // losing lastTool data on forced kill (setTimeout(fn,0) may not
+        // fire before process termination).
+        get().persist();
         return { sessionStatus: newStatus, projects: newProjects };
       }
       return { sessionStatus: newStatus };
@@ -586,7 +589,44 @@ export const useSessionStore = create((set, get) => ({
 
   addToast: (toast) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // If a mergeKey is provided, check for an existing unexpired toast with the
+    // same key.  When found, update its text to a merged summary instead of
+    // creating a new toast.  This prevents N simultaneous completion events
+    // from spawning N toasts.
+    if (toast.mergeKey) {
+      set((s) => {
+        const existing = s.toasts.find((t) => t.mergeKey === toast.mergeKey);
+        if (existing) {
+          const batchCount = (existing.batchCount || 1) + 1;
+          const updated = {
+            ...existing,
+            batchCount,
+            sessionName: `${toast.sessionName} +${batchCount - 1} 个会话`,
+            // Keep the most recent sessionId for click-to-navigate
+            sessionId: toast.sessionId,
+            // Update tool info to the latest completion
+            tool: toast.tool,
+            toolLabel: toast.toolLabel,
+            duration: toast.duration,
+          };
+          return { toasts: s.toasts.map((t) => (t.id === existing.id ? updated : t)) };
+        }
+        // No existing toast with this mergeKey — create a new one
+        return { toasts: [...s.toasts, { ...toast, id, batchCount: 1 }] };
+      });
+      return;
+    }
+
     set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
+  },
+
+  updateToastText: (id, newText) => {
+    set((s) => ({
+      toasts: s.toasts.map((t) =>
+        t.id === id ? { ...t, sessionName: newText } : t
+      ),
+    }));
   },
 
   removeToast: (id) => {

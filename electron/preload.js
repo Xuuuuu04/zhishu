@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   updateSessionNames: (names) => ipcRenderer.send('session:updateNames', names),
   cleanupSession: (sessionId) => ipcRenderer.send('session:cleanup', sessionId),
+  markSessionViewed: (sessionId) => ipcRenderer.send('session:markViewed', { sessionId }),
 
   // Global event: fired when an AI tool finishes its current response (busy → idle).
   // Unlike onSessionStatus which is per-session, this is broadcast across all sessions
