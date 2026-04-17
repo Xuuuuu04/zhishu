@@ -7,6 +7,8 @@ import {
   resolveActiveSessionId,
   removeSessionFromProjects,
   removeProjectFromProjects,
+  reorderProjectsInList,
+  reorderSessionsInProject,
   getFallbackActiveSessionId,
   resolveGroups,
   ensureUngrouped,
@@ -775,6 +777,20 @@ export const useSessionStore = create((set, get) => ({
   updateProjectPath: (projectId, path) => {
     set((s) => ({
       projects: s.projects.map((p) => (p.id === projectId ? { ...p, path } : p)),
+    }));
+    get().persist();
+  },
+
+  reorderProjects: (fromIndex, toIndex) => {
+    set((s) => ({
+      projects: reorderProjectsInList(s.projects, fromIndex, toIndex),
+    }));
+    get().persist();
+  },
+
+  reorderSessions: (projectId, fromIndex, toIndex) => {
+    set((s) => ({
+      projects: reorderSessionsInProject(s.projects, projectId, fromIndex, toIndex),
     }));
     get().persist();
   },

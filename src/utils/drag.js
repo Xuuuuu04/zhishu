@@ -17,8 +17,10 @@
  */
 export function isExternalDrop(e) {
   const hasInternalMime = e.dataTransfer.types.some((t) => t.startsWith('application/x-prism-'));
-  // During dragenter/dragover, files.length is always 0 per browser security.
-  // Use types.includes('Files') as the reliable signal for "external file drop".
   const hasFiles = e.dataTransfer.types.includes('Files') || e.dataTransfer.files.length > 0;
   return !hasInternalMime && hasFiles;
+}
+
+export function isInternalReorder(e) {
+  return e.dataTransfer.types.some((t) => t.startsWith('application/x-prism-'));
 }

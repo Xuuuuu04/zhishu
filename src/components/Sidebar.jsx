@@ -26,7 +26,7 @@ export default function Sidebar() {
     sidebarWidth, setSidebarWidth, commitSidebarWidth,
     groups, createGroup, removeGroup, renameGroup,
     moveProjectToGroup, toggleGroupCollapsed,
-    addProject, addToast,
+    addProject, addToast, reorderProjects,
   } = useSessionStore();
   const [contextMenu, setContextMenu] = useState(null);
   const [groupRenameDraft, setGroupRenameDraft] = useState(null);
@@ -320,22 +320,28 @@ export default function Sidebar() {
                   <ProjectSection
                     key={project.id}
                     project={project}
+                    index={projects.indexOf(project)}
+                    totalProjects={projects.length}
                     activeSessionId={activeSessionId}
                     sessionStatus={sessionStatus}
                     onContextMenu={handleProjectContextMenu}
+                    onReorderProject={reorderProjects}
                   />
                 ))}
               </div>
             );
           })
         ) : (
-          projects.map((project) => (
+          projects.map((project, pi) => (
             <ProjectSection
               key={project.id}
               project={project}
+              index={pi}
+              totalProjects={projects.length}
               activeSessionId={activeSessionId}
               sessionStatus={sessionStatus}
               onContextMenu={handleProjectContextMenu}
+              onReorderProject={reorderProjects}
             />
           ))
         )}

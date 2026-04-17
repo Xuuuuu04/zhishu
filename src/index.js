@@ -156,6 +156,9 @@ globalStyle.textContent = `
   /* Sidebar action button hover (project + session row buttons) */
   .sidebar-action-btn:hover { color: #fff !important; background: var(--bg-hover, #1c1c20) !important; }
 
+  /* Grip handle hover — amber highlight */
+  .sidebar-grip:hover { color: #f59e0b !important; cursor: grab; }
+
   /* Drag-over highlight on the terminal area when dragging a file in */
   .terminal-drop-zone-active {
     box-shadow: inset 0 0 0 2px rgba(245, 158, 11, 0.6) !important;

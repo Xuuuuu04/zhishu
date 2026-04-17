@@ -344,6 +344,17 @@ const styles = {
   sessionIcon: {
     display: 'flex',
     flexShrink: 0,
+    transition: 'color 0.15s, margin 0.15s',
+  },
+  gripHandle: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 12,
+    flexShrink: 0,
+    color: 'var(--text-faint, #3f3f46)',
+    cursor: 'grab',
+    paddingLeft: 2,
     transition: 'color 0.15s',
   },
   sessionName: {

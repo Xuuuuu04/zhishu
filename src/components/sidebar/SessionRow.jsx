@@ -1,65 +1,95 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PencilIcon } from '../ToolIcons';
-import { IconTerminal, IconTrash } from './icons';
+import { IconTerminal, IconTrash, IconGrip } from './icons';
 import { getPhaseIndicator, fmtDuration } from './helpers';
 import { getVisualForTool } from '../../constants/toolVisuals';
 import styles from './styles';
 
 // ─── Session row ──────────────────────────────────────────────────────────────
 
-const SessionRow = React.memo(function SessionRow({ session, projectId, isActive, onSelect, onRename, onRemove, status, now, customProviders }) {
+const SessionRow = React.memo(function SessionRow({
+  session, projectId, index, totalSessions,
+  isActive, onSelect, onRename, onRemove,
+  onReorder, status, now, customProviders,
+}) {
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [dropTarget, setDropTarget] = useState(null); // 'top' | 'bottom' | null
+  const rowRef = useRef(null);
 
-  // ── Drag support: allow dragging sessions to terminal area for split ────
+  // ── Drag support: reorder within project + split-pane drag ────────
   const handleDragStart = useCallback((e) => {
     e.dataTransfer.setData('application/x-prism-session', session.id);
+    e.dataTransfer.setData('application/x-prism-session-project', projectId);
+    e.dataTransfer.setData('application/x-prism-session-index', String(index));
     e.dataTransfer.effectAllowed = 'move';
     setDragging(true);
-  }, [session.id]);
+  }, [session.id, projectId, index]);
 
   const handleDragEnd = useCallback(() => {
     setDragging(false);
+    setDropTarget(null);
   }, []);
 
-  // ── Inline rename state (lifted out of EditableLabel for direct control) ──
-  // Multiple triggers can flip into edit mode: double-click, pencil button,
-  // or future shortcuts. The shared state lives here so they all coexist cleanly.
+  // ── Drop target for reorder ───────────────────────────────────────
+  const handleDragOver = useCallback((e) => {
+    // Only accept session drags from the same project
+    if (!e.dataTransfer.types.includes('application/x-prism-session')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.stopPropagation();
+
+    if (!rowRef.current) return;
+    const rect = rowRef.current.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDropTarget(e.clientY < midY ? 'top' : 'bottom');
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTarget(null);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropTarget(null);
+
+    const srcProjectId = e.dataTransfer.getData('application/x-prism-session-project');
+    const srcIndexStr = e.dataTransfer.getData('application/x-prism-session-index');
+    if (!srcIndexStr) return;
+    const fromIndex = parseInt(srcIndexStr, 10);
+
+    // Only reorder within same project
+    if (srcProjectId !== projectId) return;
+
+    let toIndex = dropTarget === 'top' ? index : index + 1;
+    if (fromIndex < toIndex) toIndex -= 1;
+    if (fromIndex === toIndex) return;
+
+    onReorder?.(fromIndex, toIndex);
+  }, [projectId, index, dropTarget, onReorder]);
+
+  // ── Inline rename ─────────────────────────────────────────────────
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(session.name);
   const inputRef = useRef(null);
 
-  // Keep draft in sync with the source of truth
   useEffect(() => { setDraft(session.name); }, [session.name]);
-
-  // Auto-focus + select-all when editing starts
   useEffect(() => {
-    if (editing) {
-      // Defer to next tick so the input has actually mounted
-      setTimeout(() => inputRef.current?.select(), 30);
-    }
+    if (editing) setTimeout(() => inputRef.current?.select(), 30);
   }, [editing]);
 
-  const startEdit = (e) => {
-    e?.stopPropagation();
-    setEditing(true);
-  };
-
+  const startEdit = (e) => { e?.stopPropagation(); setEditing(true); };
   const commitEdit = () => {
     setEditing(false);
     const trimmed = draft.trim();
     if (trimmed && trimmed !== session.name) onRename(trimmed);
     else setDraft(session.name);
   };
-
-  const cancelEdit = () => {
-    setEditing(false);
-    setDraft(session.name);
-  };
+  const cancelEdit = () => { setEditing(false); setDraft(session.name); };
 
   const indicator = getPhaseIndicator(status, customProviders);
 
-  // Build the sub-line content (running tool + elapsed time, OR last-ran summary)
   let subLine = null;
   if (status?.tool) {
     const visual = getVisualForTool(status.tool, customProviders);
@@ -76,7 +106,6 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
       </div>
     );
   } else if (status?.lastRanTool) {
-    // No active tool but we know what ran last -- show as muted history
     const lastVisual = getVisualForTool(status.lastRanTool, customProviders);
     const label = lastVisual.label;
     const dur = status.lastDuration ? fmtDuration(status.lastDuration) : '';
@@ -89,28 +118,58 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
 
   return (
     <div
+      ref={rowRef}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         ...styles.sessionRow,
         ...(isActive ? styles.sessionRowActive : hovered ? styles.sessionRowHover : {}),
-        ...(dragging ? { opacity: 0.5 } : {}),
+        ...(dragging ? { opacity: 0.4 } : {}),
         flexDirection: 'column',
         alignItems: 'stretch',
+        position: 'relative',
       }}
       onClick={() => { if (!editing) onSelect(); }}
       onDoubleClick={(e) => { e.stopPropagation(); startEdit(); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {/* Drop indicator line */}
+      {dropTarget === 'top' && (
+        <div style={{
+          position: 'absolute', top: -1, left: 8, right: 8, height: 2,
+          background: '#f59e0b', borderRadius: 1, zIndex: 10,
+          boxShadow: '0 0 4px rgba(245,158,11,0.5)',
+        }} />
+      )}
+      {dropTarget === 'bottom' && (
+        <div style={{
+          position: 'absolute', bottom: -1, left: 8, right: 8, height: 2,
+          background: '#f59e0b', borderRadius: 1, zIndex: 10,
+          boxShadow: '0 0 4px rgba(245,158,11,0.5)',
+        }} />
+      )}
+
       <div style={styles.sessionMainRow}>
-        {/* Active indicator bar */}
         <span style={{ ...styles.activeBar, opacity: isActive ? 1 : 0 }} />
+
+        {/* Grip handle — visible on hover */}
+        {hovered && !editing && (
+          <span style={{
+            ...styles.gripHandle,
+          }} className="sidebar-grip">
+            <IconGrip />
+          </span>
+        )}
 
         <span style={{
           ...styles.sessionIcon,
           color: isActive ? '#f59e0b' : 'var(--text-tertiary, #71717a)',
+          ...(hovered && !editing ? { marginLeft: 0 } : {}),
         }}>
           <IconTerminal />
         </span>
@@ -148,7 +207,6 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
           </span>
         )}
 
-        {/* Phase indicator dot -- always visible when active, coexists with hover actions */}
         {indicator && !editing && (
           <span
             title={indicator.title}
@@ -161,8 +219,6 @@ const SessionRow = React.memo(function SessionRow({ session, projectId, isActive
           />
         )}
 
-        {/* Hover actions: rename + delete -- ALWAYS visible on hover, even
-            when an AI tool is currently running (indicator hidden above) */}
         {hovered && !editing && (
           <div style={styles.sessionActions}>
             <button
