@@ -220,10 +220,10 @@ export default function SettingsModal() {
               {/* ── Section 2: Product narrative ── */}
               <div>
                 <div style={styles.aboutSectionTitle}>为什么是智枢</div>
-                {/* TODO: 创意策划师文案待补 */}
                 <div style={styles.aboutNarrativePlaceholder}>
-                  多款 AI CLI 工具并行时，切换窗口、记忆指令、追踪进度——每一步都是认知摩擦。
-                  智枢把它们收进一个界面，让你专注在思考本身。
+                  <p style={{ margin: '0 0 6px' }}>AI 编程工具正在碎片化——每款 CLI 独占一个窗口、一套配置、一套上下文。</p>
+                  <p style={{ margin: '0 0 6px' }}>智枢把 Claude Code、Codex、Gemini 等 8 款工具收进同一台终端指挥台，</p>
+                  <p style={{ margin: 0 }}>统一启停、监控状态、持久化上下文，适合同时驾驭多个 AI Agent 的独立开发者。</p>
                 </div>
               </div>
 
@@ -231,11 +231,11 @@ export default function SettingsModal() {
               <div>
                 <div style={styles.aboutSectionTitle}>核心能力</div>
                 <div style={styles.aboutCapGrid}>
-                  {[
-                    { icon: '🎯', title: '统一指挥', desc: '8 款 AI CLI 工具一屏管理，一键启动、切换与监控' },
-                    { icon: '⚡', title: '多工具切换', desc: 'Claude / Codex / Gemini / Qwen / GLM / MiniMax / Kimi / OpenCode' },
-                    { icon: '📡', title: '进程监控', desc: '状态机精确追踪 AI 运行阶段，响应完成即时通知' },
-                    { icon: '💾', title: '终端持久化', desc: '缓冲区跨会话保留，重启后恢复上下文继续工作' },
+                  [
+                    { icon: '🎯', title: '统一指挥台', desc: '8 款 AI CLI 在单一窗口内启动、切换、关闭' },
+                    { icon: '⚡', title: '热切换 Provider', desc: '注入环境变量，无需关闭终端即可换用另一款 AI' },
+                    { icon: '📡', title: '静默感知通知', desc: 'AI 输出停止 3 秒自动提醒，漏消息和误扰同时消除' },
+                    { icon: '💾', title: '终端状态恢复', desc: '重启后自动加载上次终端缓冲，上下文不丢失' },
                   ].map(({ icon, title, desc }) => (
                     <div key={title} style={styles.aboutCapCard}>
                       <div style={styles.aboutCapCardHeader}>
