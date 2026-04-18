@@ -231,7 +231,7 @@ export default function SettingsModal() {
               <div>
                 <div style={styles.aboutSectionTitle}>核心能力</div>
                 <div style={styles.aboutCapGrid}>
-                  [
+                  {[
                     { icon: '🎯', title: '统一指挥台', desc: '8 款 AI CLI 在单一窗口内启动、切换、关闭' },
                     { icon: '⚡', title: '热切换 Provider', desc: '注入环境变量，无需关闭终端即可换用另一款 AI' },
                     { icon: '📡', title: '静默感知通知', desc: 'AI 输出停止 3 秒自动提醒，漏消息和误扰同时消除' },
